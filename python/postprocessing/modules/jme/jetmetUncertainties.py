@@ -16,42 +16,19 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 
 class jetmetUncertaintiesProducer(Module):
-    def __init__(self,
-                 era,
-                 globalTag,
-                 jesUncertainties=["Total"],
-                 archive=None,
-                 globalTagProd=None,
-                 jetType="AK4PFchs",
-                 metBranchName="MET",
-                 jerTag="",
-                 isData=False,
-                 applySmearing=True,
-                 applyHEMfix=False,
-                 splitJER=False,
-                 saveMETUncs=['T1', 'T1Smear']
-     ):
+    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, doResiduals=True, noGroom=False):
 
         # globalTagProd only needs to be defined if METFixEE2017 is to be
         # recorrected, and should be the GT that was used for the production
         # of the nanoAOD files
         self.era = era
-        self.isData = isData
-        # if set to true, Jet_pt_nom will have JER applied. not to be
-        # switched on for data.
-        self.applySmearing = applySmearing if not isData else False
-        self.splitJER = splitJER
-        if self.splitJER:
-            self.splitJERIDs = list(range(6))
-        else:
-            self.splitJERIDs = [""]  # "empty" ID for the overall JER
-        self.metBranchName = metBranchName
-        self.rhoBranchName = "fixedGridRhoFastjetAll"
-        # --------------------------------------------------------------------
-        # CV: globalTag and jetType not yet used in the jet smearer, as there
-        # is no consistent set of txt files for JES uncertainties and JER scale
-        # factors and uncertainties yet
-        # --------------------------------------------------------------------
+        self.redoJEC = redoJEC
+        self.doResiduals = doResiduals
+        self.noGroom = noGroom
+        #--------------------------------------------------------------------------------------------
+        # CV: globalTag and jetType not yet used, as there is no consistent set of txt files for
+        #     JES uncertainties and JER scale factors and uncertainties yet
+        #--------------------------------------------------------------------------------------------
 
         self.jesUncertainties = jesUncertainties
 
@@ -129,46 +106,9 @@ class jetmetUncertaintiesProducer(Module):
         if applyHEMfix:
             self.jesUncertainties.append("HEMIssue")
 
-        # Define the jet recalibrator
-        self.jetReCalibrator = JetReCalibrator(
-            globalTag,
-            jetType,
-            True,
-            self.jesInputFilePath,
-            calculateSeparateCorrections=False,
-            calculateType1METCorrection=False)
-
-        # Define the recalibrator for level 1 corrections only
-        self.jetReCalibratorL1 = JetReCalibrator(
-            globalTag,
-            jetType,
-            False,
-            self.jesInputFilePath,
-            calculateSeparateCorrections=True,
-            calculateType1METCorrection=False,
-            upToLevel=1)
-
-        # Define the recalibrators for GT used in nanoAOD production
-        # (only needed to reproduce 2017 v2 MET)
-        if globalTagProd:
-            self.jetReCalibratorProd = JetReCalibrator(
-                globalTagProd,
-                jetType,
-                True,
-                self.jesInputFilePath,
-                calculateSeparateCorrections=False,
-                calculateType1METCorrection=False)
-            self.jetReCalibratorProdL1 = JetReCalibrator(
-                globalTagProd,
-                jetType,
-                False,
-                self.jesInputFilePath,
-                calculateSeparateCorrections=True,
-                calculateType1METCorrection=False,
-                upToLevel=1)
-        else:
-            self.jetReCalibratorProd = False
-            self.jetReCalibratorProdL1 = False
+	if self.redoJEC :
+	    self.jetReCalibrator = JetReCalibrator(globalTag, jetType , self.doResiduals, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
+	
 
         # define energy threshold below which jets are considered as "unclustered energy"
         # cf. JetMETCorrections/Type1MET/python/correctionTermsPfMetType1Type2_cff.py
