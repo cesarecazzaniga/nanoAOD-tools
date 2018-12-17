@@ -33,7 +33,8 @@ class METSigProducer(Module):
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
-        self.out.branch("MET_SignificanceRec", "F")
+        self.out.branch("MET_significance", "F")
+        self.out.branch("MET_significance_nom", "F")
 
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         pass
@@ -101,8 +102,10 @@ class METSigProducer(Module):
         met_y = met.pt * math.sin(met.phi)
 
         MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
-        
-        self.out.fillBranch("MET_SignificanceRec", MET_sig)
+        MET_sig_old = met.significance
+
+        self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
+        self.out.fillBranch("MET_significance", MET_sig)
         return True
 
 # define modules using the syntax 'name = lambda : constructor' to avoid having them loaded when not needed
