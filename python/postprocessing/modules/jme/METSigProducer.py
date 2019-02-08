@@ -26,7 +26,7 @@ class METSigProducer(Module):
         self.JERdirectory   = os.path.expandvars(self.JERdirectory)
         self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
         self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
-        self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
         pass
@@ -34,7 +34,7 @@ class METSigProducer(Module):
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
         self.out.branch("MET_significance", "F")
-        self.out.branch("MET_significance_nom", "F")
+        #self.out.branch("MET_significance_nom", "F")
 
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         pass
@@ -46,15 +46,42 @@ class METSigProducer(Module):
                 return int(i)
                 break
 
+    def deltaPhi(self, phi1, phi2):
+        dphi = phi2-phi1
+        if  dphi > math.pi:
+            dphi -= 2.0*math.pi
+        if dphi <= -math.pi:
+            dphi += 2.0*math.pi
+        return abs(dphi)
+
+    def deltaR2(self, l1, l2):
+        return self.deltaPhi(l1.phi, l2.phi)**2 + (l1.eta - l2.eta)**2
+
+    def deltaR(self, l1, l2):
+        return math.sqrt(self.deltaR2(l1,l2))
+
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
-        jets = Collection(event, "Jet")
-        met = Object(event, "MET")
-        rho = getattr(event, "fixedGridRhoFastjetAll")
+        jets        = Collection(event, "Jet")
+        electrons   = Collection(event, "Electron")
+        muons       = Collection(event, "Muon")
+        photons     = Collection(event, "Photon")
+        met         = Object(event, "MET")
+        rho         = getattr(event, "fixedGridRhoFastjetAll")
+
+        # clean against electrons, muons and photons with pt>10 GeV
+        cleanJets = []
+        for j in jets:
+            clean = True
+            for coll in [electrons,muons,photons]:
+                for l in coll:
+                    if l.pt > 10 and self.deltaR(j, l) < 0.4: clean = False
+            if clean:
+                cleanJets += [j]
 
         # get the JER
-        for j in jets:
-            jet = ROOT.JME.JetParameters()
+        jet = ROOT.JME.JetParameters()
+        for j in cleanJets:
             jet.setJetEta(j.eta).setJetPt(j.pt).setRho(rho)
             j.dpt   = self.res_pt.getResolution(jet)
             j.dphi  = self.res_phi.getResolution(jet)
@@ -63,7 +90,7 @@ class METSigProducer(Module):
         cov_xy  = 0
         cov_yy  = 0
         i = 0
-        for j in jets:
+        for j in cleanJets:
             if not j.cleanmask>0: continue
             index = self.getBin(abs(j.eta))
 
@@ -102,13 +129,13 @@ class METSigProducer(Module):
         met_y = met.pt * math.sin(met.phi)
 
         MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
-        MET_sig_old = met.significance
+        #MET_sig_old = met.significance
 
-        self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
+        #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
         self.out.fillBranch("MET_significance", MET_sig)
         return True
 
 # define modules using the syntax 'name = lambda : constructor' to avoid having them loaded when not needed
 
-metSig = lambda : METSigProducer( "Summer16_25nsV1_MC", [1.2,1.0] )
+metSig = lambda : METSigProducer( "Summer16_25nsV1_MC", [1.0,1.0,1.0,1.0,1.0,0.0,0.5] )
 

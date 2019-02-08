@@ -34,8 +34,7 @@ class lumiWeightProducer(Module):
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
         if not self.isData:
-            genWeight = getattr(event, "genWeight")
-            weight = self.lumiScaleFactor * genWeight
+            weight = self.lumiScaleFactor * event.genWeight
             self.out.fillBranch("weight", weight)
         else:
             # for data
