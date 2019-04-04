@@ -16,7 +16,7 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 
 class jetmetUncertaintiesProducer(Module):
-    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jer="Summer16_25nsV1", jetType = "AK4PFchs", redoJEC=False, doResiduals=True, noGroom=False, METBranchName='MET'):
+    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jer="Summer16_25nsV1", jetType = "AK4PFchs", redoJEC=False, doResiduals=True, noGroom=False, METBranchName='MET', unclEnThreshold=15):
 
         # globalTagProd only needs to be defined if METFixEE2017 is to be
         # recorrected, and should be the GT that was used for the production
@@ -25,6 +25,7 @@ class jetmetUncertaintiesProducer(Module):
         self.redoJEC = redoJEC
         self.doResiduals = doResiduals
         self.noGroom = noGroom
+        self.unclEnThreshold = unclEnThreshold
         #--------------------------------------------------------------------------------------------
         # CV: globalTag and jetType not yet used, as there is no consistent set of txt files for
         #     JES uncertainties and JER scale factors and uncertainties yet
@@ -122,8 +123,8 @@ class jetmetUncertaintiesProducer(Module):
 	
 
         # define energy threshold below which jets are considered as "unclustered energy"
-        # cf. JetMETCorrections/Type1MET/python/correctionTermsPfMetType1Type2_cff.py
-        self.unclEnThreshold = 15.
+        # (cf. JetMETCorrections/Type1MET/python/correctionTermsPfMetType1Type2_cff.py )
+        #self.unclEnThreshold = 15.
 
         # load libraries for accessing JES scale factors and uncertainties
         # from txt files
@@ -626,7 +627,7 @@ class jetmetUncertaintiesProducer(Module):
 
             # progate JER and JES corrections and uncertainties to MET
             if self.corrMET and jet_pt_nom > self.unclEnThreshold:
-                if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 ): # do not re-correct for jets that aren't included in METv2 recipe
+                if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1-jet.rawFactor)<50 ): # do not re-correct for jets that aren't included in METv2 recipe
                     jet_cosPhi = math.cos(jet.phi)
                     jet_sinPhi = math.sin(jet.phi)
                     #print "Correcting met_x %s by %s"%(met_px_nom, (jet_pt_nom - jet_pt_orig)*jet_cosPhi)

@@ -11,11 +11,15 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 class METSigProducer(Module):
 
-    def __init__(self, JERera, parameters):
+    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15.):
         jetCorrParam = ROOT.JetCorrectorParameters()
 
         self.pars               = parameters
         self.JERera             = JERera
+        self.METCollection      = METCollection
+        self.useRecorr          = useRecorr
+        self.calcVariations     = calcVariations
+        self.jetThreshold       = jetThreshold
         self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
         self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
         self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
@@ -34,6 +38,9 @@ class METSigProducer(Module):
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
         self.out.branch("MET_significance", "F")
+        if self.calcVariations:
+            for var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
+                self.out.branch("MET_significance"+var, "F")
         #self.out.branch("MET_significance_nom", "F")
 
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
@@ -66,73 +73,109 @@ class METSigProducer(Module):
         electrons   = Collection(event, "Electron")
         muons       = Collection(event, "Muon")
         photons     = Collection(event, "Photon")
-        met         = Object(event, "MET")
+        met         = Object(event, self.METCollection)
+        metStd      = Object(event, "MET")
         rho         = getattr(event, "fixedGridRhoFastjetAll")
 
-        # clean against electrons, muons and photons with pt>10 GeV
-        cleanJets = []
-        for j in jets:
-            clean = True
-            for coll in [electrons,muons,photons]:
-                for l in coll:
-                    if l.pt > 10 and self.deltaR(j, l) < 0.4: clean = False
-            if clean:
-                cleanJets += [j]
+        ## calculate MET significance for all variants of MET/jets
+        if self.useRecorr: variations = ['_nom']
+        else: variations = ['']
 
-        # get the JER
-        jet = ROOT.JME.JetParameters()
-        for j in cleanJets:
-            jet.setJetEta(j.eta).setJetPt(j.pt).setRho(rho)
-            j.dpt   = self.res_pt.getResolution(jet)
-            j.dphi  = self.res_phi.getResolution(jet)
+        if self.calcVariations:
+            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']
 
-        cov_xx  = 0
-        cov_xy  = 0
-        cov_yy  = 0
-        i = 0
-        for j in cleanJets:
-            if not j.cleanmask>0: continue
-            index = self.getBin(abs(j.eta))
+        jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
 
-            cj = math.cos(j.phi)
-            sj = math.sin(j.phi)
-            dpt = self.pars[index] * j.pt * j.dpt
-            dph =                    j.pt * j.dphi
+        for var in variations:
+            # no unclustered energy uncertainty for jets
+            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown']:
+                jetPtVar = 'pt'+var
+            metPtVar = 'pt'+var
+            phiVar = 'phi'+var
 
-            dpt *= dpt
-            dph *= dph
+            # clean against electrons, muons and photons with pt>10 GeV
+            sumPtFromJets = 0
+            cleanJets = []
+            for j in jets:
+                clean = True
+                for coll in [electrons,muons,photons]:
+                    for l in coll:
+                        if l.pt > 10 and self.deltaR(j, l) < 0.4: clean = False
+                if clean:
+                    if getattr(j, jetPtVar) > self.jetThreshold:
+                        cleanJets += [j]
+                    else:
+                        sumPtFromJets += getattr(j, jetPtVar)
 
-            cov_xx += dpt*cj*cj + dph*sj*sj
-            cov_xy += (dpt-dph)*cj*sj
-            cov_yy += dph*cj*cj + dpt*sj*sj
+            # get the JER
+            jet = ROOT.JME.JetParameters()
+            for j in cleanJets:
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)).setRho(rho)
+                j.dpt   = self.res_pt.getResolution(jet)
+                j.dphi  = self.res_phi.getResolution(jet)
 
-            i += 1
+            cov_xx  = 0
+            cov_xy  = 0
+            cov_yy  = 0
+            i = 0
+            for j in cleanJets:
+                if not j.cleanmask>0: continue
+                index = self.getBin(abs(j.eta))
 
-        # unclustered energy
-        cov_tt = self.pars[5]**2 + self.pars[6]**2*met.sumPt
-        cov_xx += cov_tt
-        cov_yy += cov_tt
+                cj = math.cos(j.phi)
+                sj = math.sin(j.phi)
+                dpt = self.pars[index] * getattr(j, jetPtVar) * j.dpt
+                dph =                    getattr(j, jetPtVar) * j.dphi
 
-        det = cov_xx*cov_yy - cov_xy*cov_xy
+                dpt *= dpt
+                dph *= dph
 
-        if det>0:
-            ncov_xx =  cov_yy / det
-            ncov_xy = -cov_xy / det
-            ncov_yy =  cov_xx / det
-        else:
-            #print cov_xx, cov_yy, cov_xy
-            ncov_xx = cov_xx if cov_xx > 0 else 1
-            ncov_yy = cov_yy if cov_yy > 0 else 1
-            ncov_xy = cov_xy if cov_xy > 0 else 1
+                cov_xx += dpt*cj*cj + dph*sj*sj
+                cov_xy += (dpt-dph)*cj*sj
+                cov_yy += dph*cj*cj + dpt*sj*sj
 
-        met_x = met.pt * math.cos(met.phi)
-        met_y = met.pt * math.sin(met.phi)
+                i += 1
 
-        MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
-        #MET_sig_old = met.significance
+            # unclustered energy
+            if 'unclust' in var:
+                if 'Up' in var:
+                    totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+                else:
+                    totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+            else:
+                totalSumPt = metStd.sumPt + sumPtFromJets
 
-        #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
-        self.out.fillBranch("MET_significance", MET_sig)
+            cov_tt = self.pars[5]**2 + self.pars[6]**2*totalSumPt
+            cov_xx += cov_tt
+            cov_yy += cov_tt
+
+            det = cov_xx*cov_yy - cov_xy*cov_xy
+
+            if det>0:
+                ncov_xx =  cov_yy / det
+                ncov_xy = -cov_xy / det
+                ncov_yy =  cov_xx / det
+            else:
+                #print cov_xx, cov_yy, cov_xy
+                ncov_xx = cov_xx if cov_xx > 0 else 1
+                ncov_yy = cov_yy if cov_yy > 0 else 1
+                ncov_xy = cov_xy if cov_xy > 0 else 1
+
+            met_pt  = getattr(met, metPtVar)
+            met_phi = getattr(met, phiVar)
+
+            met_x = met_pt * math.cos(met_phi)
+            met_y = met_pt * math.sin(met_phi)
+
+            MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
+            #MET_sig_old = met.significance
+
+            #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
+            if var == '' or var == '_nom':
+                self.out.fillBranch("MET_significance", MET_sig)
+            else:
+                self.out.fillBranch("MET_significance"+var, MET_sig)
+
         return True
 
 # define modules using the syntax 'name = lambda : constructor' to avoid having them loaded when not needed
