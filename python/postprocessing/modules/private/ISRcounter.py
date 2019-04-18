@@ -65,17 +65,15 @@ class ISRcounter(Module):
 
         # clean jets from leptons
 
+        # use loosely isolated veto electrons
         selectedElectrons = []
-        selectedElectrons += electrons
-        #for e in electrons:
-        #    #if e.pt>10 and abs(e.eta)<2.5 and abs(e.dxy) < 0.05 and abs(e.dz) < 0.1 and e.pfRelIso03_all<0.5 and e.lostHits <= 1.0 and e.cutBased >= 2: selectedElectrons.append(e)
-        #    if e.pt>10 and abs(e.eta)<2.5 and abs(e.dxy) < 0.5 and abs(e.dz) < 1.0 and e.lostHits <= 1.0 : selectedElectrons.append(e)
+        for e in electrons:
+            if e.pt>10 and e.cutBased >= 1 and e.miniPFRelIso_all<0.4: selectedElectrons.append(e)
 
+        # use loosely isolated loose muons
         selectedMuons = []
-        selectedMuons += muons
-        #for m in muons:
-        #    #if m.pt>10 and abs(m.eta)<2.4 and abs(m.dxy) < 0.05 and abs(m.dz) < 0.1 and m.pfRelIso03_all<0.5: selectedMuons.append(m)
-        #    if m.pt>10 and abs(m.eta)<2.4 and abs(m.dxy) < 0.5 and abs(m.dz) < 1.0 : selectedMuons.append(m)
+        for m in muons:
+            if m.pt>10 and m.isPFcand and (m.isTracker or m.isGlobal) and m.miniPFRelIso_all<0.4: selectedMuons.append(m)
 
         cleanJets = []
         for j in jets:
