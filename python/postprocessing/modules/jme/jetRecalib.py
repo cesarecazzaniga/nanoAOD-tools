@@ -106,7 +106,7 @@ class jetRecalib(Module):
             jec         = jet_pt_nom/jet_pt_raw
 
             # only correct the non-muon fraction of the jet for T1 MET
-            jet_pt_T1   = jec*(1-jet.muEF)*jet.pt + jet.muEF*jet.pt
+            jet_pt_T1   = jec*(1-jet.muEF)*jet_pt_raw + jet.muEF*jet_pt_raw
 
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
