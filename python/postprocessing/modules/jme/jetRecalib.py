@@ -97,20 +97,24 @@ class jetRecalib(Module):
         met_shift_x, met_shift_y = 0., 0.
 
         for jet in jets:
+            # copy the jet_pt from the tuple
+            jet_pt          = jet.pt
             # get the raw jet pt
-            jet_pt_raw  = jet.pt*(1 - jet.rawFactor)
+            jet_pt_raw      = jet.pt*(1 - jet.rawFactor)
             # get the corrected jet pt
-            jet_pt_nom  = self.jetReCalibrator.correct(jet,rho)
-
-            # get the correction factor
-            jec         = jet_pt_nom/jet_pt_raw
+            jet_pt_nom      = self.jetReCalibrator.correct(jet,rho)
+            jet.pt          = jet_pt_raw * ( 1 - jet.muEF )
+            jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
+            jet_pt_noMu     = self.jetReCalibrator.correct(jet,rho) if jet.pt > 15 else jet_pt_raw*( 1 - jet.muEF ) # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
 
             # only correct the non-muon fraction of the jet for T1 MET
-            jet_pt_T1   = jec*(1-jet.muEF)*jet_pt_raw + jet.muEF*jet_pt_raw
+            jet_pt_T1   = jet_pt_noMu + jet.muEF*jet_pt_raw
 
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
+
+            print jet_pt, jet_pt_raw, jet_pt_noMu, jet_pt_T1, jet.muEF
 
             # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
             if jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:

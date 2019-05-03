@@ -336,11 +336,21 @@ class jetmetUncertaintiesProducer(Module):
             jets_mass_jesUp[jesUncertainty] = []
             jets_mass_jesDown[jesUncertainty] = []
 
-        met = Object(event, self.metBranchName)
-        rawmet = Object(event, "RawMET")
-        if "Puppi" in self.metBranchName:
-            rawmet = Object(event, "RawPuppiMET")
-        defmet = Object(event, "MET")
+        if self.corrMET :
+            met = Object(event, self.metBranchName)
+            rawmet = Object(event, "RawMET")
+            #( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
+            ( met_px,         met_py         ) = ( rawmet.pt*math.cos(rawmet.phi), rawmet.pt*math.sin(rawmet.phi) )
+            ( met_px_nom,     met_py_nom     ) = ( met_px, met_py )
+            ( met_px_jerUp,   met_py_jerUp   ) = ( met_px, met_py )
+            ( met_px_jerDown, met_py_jerDown ) = ( met_px, met_py )
+            ( met_px_jesUp,   met_py_jesUp   ) = ( {}, {} )
+            ( met_px_jesDown, met_py_jesDown ) = ( {}, {} )
+            for jesUncertainty in self.jesUncertainties:
+                met_px_jesUp[jesUncertainty]   = met_px
+                met_py_jesUp[jesUncertainty]   = met_py
+                met_px_jesDown[jesUncertainty] = met_px
+                met_py_jesDown[jesUncertainty] = met_py
 
         (t1met_px, t1met_py) = (met.pt * math.cos(met.phi),
                                 met.pt * math.sin(met.phi))
@@ -410,7 +420,7 @@ class jetmetUncertaintiesProducer(Module):
             # (cf. https://twiki.cern.ch/twiki/bin/view/CMS/JetResolution and https://twiki.cern.ch/twiki/bin/view/CMSPublic/WorkBookJetEnergyResolution )
             ( jet_pt_jerNomVal, jet_pt_jerUpVal, jet_pt_jerDownVal ) = self.jetSmearer.getSmearValsPt(jet, genJet, rho)
 	    
-            jet_pt=jet.pt
+            jet_pt = jet.pt
             jet_pt_orig = jet_pt
             if hasattr(jet, "rawFactor"):
                 jet_rawpt = jet.pt * (1 - jet.rawFactor)
@@ -418,12 +428,17 @@ class jetmetUncertaintiesProducer(Module):
                 jet_rawpt = -1.0 * jet.pt #If factor not present factor will be saved as -1
             
             if self.redoJEC :
-                jet_pt = self.jetReCalibrator.correct(jet,rho)
+                jet_pt      = self.jetReCalibrator.correct(jet,rho)
+                jet.pt      = jet_pt * ( 1 - jet.muEF )
+                jet_pt_noMu = self.jetReCalibrator.correct(jet,rho)
+            jec = jet_pt/jet_rawpt
             jets_corr_JEC.append(jet_pt/jet_rawpt)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
             #jet_pt_nom           = jet_pt_jerNomVal *jet_pt
-            jet_pt_nom           = jet_pt
+            jet_pt_nom      = jet_pt
+            jet_pt_T1       = jet_pt_noMu + jet.muEF*jet_rawpt
+            print jet_pt_orig, jet_rawpt, jet_pt_noMu, jet_pt_T1, jet.muEF
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt
@@ -432,8 +447,10 @@ class jetmetUncertaintiesProducer(Module):
             jets_pt_jerUp  .append(jet_pt_jerUpVal*jet_pt)
             jets_pt_jerDown.append(jet_pt_jerDownVal*jet_pt)
             # evaluate JES uncertainties
-            jet_pt_jesUp   = {}
-            jet_pt_jesDown = {}
+            jet_pt_jesUp     = {}
+            jet_pt_jesDown   = {}
+            jet_pt_jesUpT1   = {}
+            jet_pt_jesDownT1 = {}
             jet_mass_jesUp   = {}
             jet_mass_jesDown = {}
             jet_mass_jmsUp   = []
@@ -607,42 +624,53 @@ class jetmetUncertaintiesProducer(Module):
                 jet_mass_jerUp[thisJERID] = jet_pt_jerUpVal * jet_mass
                 jet_mass_jerDown[thisJERID] = jet_pt_jerDownVal * jet_mass
 
-                # evaluate JES uncertainties
-                jet_pt_jesUp = {}
-                jet_pt_jesDown = {}
-                jet_pt_jesUpT1 = {}
-                jet_pt_jesDownT1 = {}
+            
+            for jesUncertainty in self.jesUncertainties:
+                # (cf. https://twiki.cern.ch/twiki/bin/view/CMSPublic/WorkBookJetEnergyCorrections#JetCorUncertainties )
+                self.jesUncertainty[jesUncertainty].setJetPt(jet_pt_nom)
+                self.jesUncertainty[jesUncertainty].setJetEta(jet.eta)
+                delta = self.jesUncertainty[jesUncertainty].getUncertainty(True)
+                jet_pt_jesUp[jesUncertainty]   = jet_pt_nom*(1. + delta)
+                jet_pt_jesDown[jesUncertainty] = jet_pt_nom*(1. - delta)
+                jets_pt_jesUp[jesUncertainty].append(jet_pt_jesUp[jesUncertainty])
+                jets_pt_jesDown[jesUncertainty].append(jet_pt_jesDown[jesUncertainty])
+                jet_mass_jesUp   [jesUncertainty] = jet_mass_nom*(1. + delta)
+                jet_mass_jesDown [jesUncertainty] = jet_mass_nom*(1. - delta)
+                jets_mass_jesUp  [jesUncertainty].append(jet_mass_jesUp[jesUncertainty])
+                jets_mass_jesDown[jesUncertainty].append(jet_mass_jesDown[jesUncertainty])
+                if self.doGroomed :
+                    jet_msdcorr_jesUp   [jesUncertainty] = jet_msdcorr_nom*(1. + delta)
+                    jet_msdcorr_jesDown [jesUncertainty] = jet_msdcorr_nom*(1. - delta)
+                    jets_msdcorr_jesUp  [jesUncertainty].append(jet_msdcorr_jesUp[jesUncertainty])
+                    jets_msdcorr_jesDown[jesUncertainty].append(jet_msdcorr_jesDown[jesUncertainty])                    
+                
+                # redo JES variations for T1 MET
+                self.jesUncertainty[jesUncertainty].setJetPt(jet_pt_T1)
+                self.jesUncertainty[jesUncertainty].setJetEta(jet.eta)
+                delta = self.jesUncertainty[jesUncertainty].getUncertainty(True)
+                jet_pt_jesUpT1[jesUncertainty]   = jet_pt_T1*(1. + delta)
+                jet_pt_jesDownT1[jesUncertainty] = jet_pt_T1*(1. - delta)
 
-                jet_mass_jesUp = {}
-                jet_mass_jesDown = {}
-
-                # don't store the low pt jets in the Jet_pt_nom branch
-                if iJet < nJet:
-                    for jerID in self.splitJERIDs:
-                        jets_pt_jerUp[jerID].append(jet_pt_jerUp[jerID])
-                        jets_pt_jerDown[jerID].append(jet_pt_jerDown[jerID])
-                        jets_mass_jerUp[jerID].append(jet_mass_jerUp[jerID])
-                        jets_mass_jerDown[jerID].append(
-                            jet_mass_jerDown[jerID])
 
             # progate JER and JES corrections and uncertainties to MET
-            if self.corrMET and jet_pt_nom > self.unclEnThreshold:
+            if self.corrMET and jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
                 if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1-jet.rawFactor)<50 ): # do not re-correct for jets that aren't included in METv2 recipe
                     jet_cosPhi = math.cos(jet.phi)
                     jet_sinPhi = math.sin(jet.phi)
                     #print "Correcting met_x %s by %s"%(met_px_nom, (jet_pt_nom - jet_pt_orig)*jet_cosPhi)
                     #print "Correcting met_y %s by %s"%(met_py_nom, (jet_pt_nom - jet_pt_orig)*jet_sinPhi)
-                    met_px_nom = met_px_nom - (jet_pt_nom - jet_pt_orig)*jet_cosPhi
-                    met_py_nom = met_py_nom - (jet_pt_nom - jet_pt_orig)*jet_sinPhi
-                    met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_cosPhi
-                    met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_sinPhi
-                    met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_pt_nom)*jet_cosPhi
-                    met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_pt_nom)*jet_sinPhi
+                    #print jet_pt_T1, jet_pt_nom
+                    met_px_nom     = met_px_nom     - (jet_pt_T1     - jet_rawpt)*jet_cosPhi # correct from raw level
+                    met_py_nom     = met_py_nom     - (jet_pt_T1     - jet_rawpt)*jet_sinPhi # correct from raw level
+                    met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_rawpt)*jet_cosPhi
+                    met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_rawpt)*jet_sinPhi
+                    met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_rawpt)*jet_cosPhi
+                    met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_rawpt)*jet_sinPhi
                     for jesUncertainty in self.jesUncertainties:
-                        met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUp[jesUncertainty]   - jet_pt_nom)*jet_cosPhi
-                        met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUp[jesUncertainty]   - jet_pt_nom)*jet_sinPhi
-                        met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDown[jesUncertainty] - jet_pt_nom)*jet_cosPhi
-                        met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDown[jesUncertainty] - jet_pt_nom)*jet_sinPhi
+                        met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_rawpt)*jet_cosPhi
+                        met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_rawpt)*jet_sinPhi
+                        met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_rawpt)*jet_cosPhi
+                        met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_rawpt)*jet_sinPhi
 
         # propagate "unclustered energy" uncertainty to MET
         if self.metBranchName == 'METFixEE2017':
