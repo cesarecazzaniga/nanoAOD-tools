@@ -1,5 +1,5 @@
 import ROOT
-import math, os,re
+import math, os,re,copy
 import numpy as np
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
@@ -56,28 +56,48 @@ class jetRecalib(Module):
         """process event, return True (go to next module) or False (fail, go to next event)"""
         jets = Collection(event, self.jetBranchName )
         met = Object(event, self.metBranchName) 
+        rawmet = Object(event, "RawMET") 
 
         jets_pt_nom = []
-        ( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
-        ( met_px_nom, met_py_nom ) = ( met_px, met_py )
-        met_px_nom = met_px
-        met_py_nom = met_py
-                
+        ( met_px,         met_py        ) = ( met.pt*math.cos(met.phi),         met.pt*math.sin(met.phi) )
+        ( raw_met_px,     raw_met_py    ) = ( rawmet.pt*math.cos(rawmet.phi),   rawmet.pt*math.sin(rawmet.phi) )
+
         rho = getattr(event, self.rhoBranchName)
-        
+
+        met_shift_x, met_shift_y = 0., 0.
+
         for jet in jets:
-            jet_pt=jet.pt
-            jet_pt = self.jetReCalibrator.correct(jet,rho)
-            jet_pt_nom           = jet_pt # don't smear resolution in data
+            # copy the jet_pt from the tuple
+            jet_pt          = jet.pt
+            # get the raw jet pt
+            jet_pt_raw      = jet.pt*(1 - jet.rawFactor)
+            # get the corrected jet pt
+            jet_pt_nom      = self.jetReCalibrator.correct(jet,rho)
+            jet.pt          = jet_pt_raw * ( 1 - jet.muEF )
+            jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
+            jet_pt_noMu     = self.jetReCalibrator.correct(jet,rho) if jet.pt > 15 else jet_pt_raw*( 1 - jet.muEF ) # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+
+            # only correct the non-muon fraction of the jet for T1 MET
+            jet_pt_T1   = jet_pt_noMu + jet.muEF*jet_pt_raw
+
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
-            if jet_pt_nom > self.unclEnThreshold:
+
+            print jet_pt, jet_pt_raw, jet_pt_noMu, jet_pt_T1, jet.muEF
+
+            # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
+            if jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
                 if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50):
-                    met_px_nom = met_px_nom - (jet_pt_nom - jet.pt)*jet_cosPhi
-                    met_py_nom = met_py_nom - (jet_pt_nom - jet.pt)*jet_sinPhi
+
+                    met_shift_x += (jet_pt_raw - jet_pt_T1) * jet_cosPhi
+                    met_shift_y += (jet_pt_raw - jet_pt_T1) * jet_sinPhi
+
+        met_px_nom = raw_met_px + met_shift_x
+        met_py_nom = raw_met_py + met_shift_y
+
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
         self.out.fillBranch("%s_pt_nom" % self.metBranchName, math.sqrt(met_px_nom**2 + met_py_nom**2))
         self.out.fillBranch("%s_phi_nom" % self.metBranchName, math.atan2(met_py_nom, met_px_nom))        
