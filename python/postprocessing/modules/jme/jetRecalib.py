@@ -32,19 +32,11 @@ class jetRecalib(Module):
         self.jesInputFilePath = tempfile.mkdtemp()
         self.jesArchive.extractall(self.jesInputFilePath)
 
-        self.jetReCalibrator = JetReCalibrator(
-            globalTag,
-            jetType,
-            True,
-            self.jesInputFilePath,
-            calculateSeparateCorrections=False,
-            calculateType1METCorrection=False)
+        self.jetReCalibrator = JetReCalibrator(globalTag, jetType , True, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
 
-        # load libraries for accessing JES scale factors and
-        # uncertainties from txt files
-        for library in [
-                "libCondFormatsJetMETObjects", "libPhysicsToolsNanoAODTools"
-        ]:
+        self.jetReCalibratorL1 = JetReCalibrator(globalTag, jetType , False, self.jesInputFilePath, calculateSeparateCorrections = True, calculateType1METCorrection  = False, upToLevel=1)
+        # load libraries for accessing JES scale factors and uncertainties from txt files
+        for library in [ "libCondFormatsJetMETObjects", "libPhysicsToolsNanoAODTools" ]:
             if library not in ROOT.gSystem.GetLibraries():
                 print("Load Library '%s'" % library.replace("lib", ""))
                 ROOT.gSystem.Load(library)
@@ -76,9 +68,10 @@ class jetRecalib(Module):
     
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
-        jets = Collection(event, self.jetBranchName )
-        met = Object(event, self.metBranchName) 
-        rawmet = Object(event, "RawMET") 
+        jets    = Collection(event, self.jetBranchName )
+        met     = Object(event, self.metBranchName) 
+        rawmet  = Object(event, "RawMET") 
+        muons   = Collection(event, "Muon") 
 
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail,
@@ -99,31 +92,56 @@ class jetRecalib(Module):
         for jet in jets:
             # copy the jet_pt from the tuple
             jet_pt          = jet.pt
+            rawFactor       = jet.rawFactor
             # get the raw jet pt
             jet_pt_raw      = jet.pt*(1 - jet.rawFactor)
             # get the corrected jet pt
             jet_pt_nom      = self.jetReCalibrator.correct(jet,rho)
-            jet.pt          = jet_pt_raw * ( 1 - jet.muEF )
-            jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
-            jet_pt_noMu     = self.jetReCalibrator.correct(jet,rho) if jet.pt > 15 else jet_pt_raw*( 1 - jet.muEF ) # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+            #jet_pt_nom_T1   = jet_pt_nom - self.jetReCalibratorL1.correct(jet,rho)
 
-            # only correct the non-muon fraction of the jet for T1 MET
-            jet_pt_T1   = jet_pt_noMu + jet.muEF*jet_pt_raw
+            newjet = ROOT.TLorentzVector()
+            newjet.SetPtEtaPhiM(jet.pt*(1-jet.rawFactor), jet.eta, jet.phi, jet.mass )
+            muon_pt = 0
+            if jet.muonIdx1>-1:
+                newjet = newjet - muons[jet.muonIdx1].p4()
+                muon_pt += muons[jet.muonIdx1].pt
+            if jet.muonIdx2>-1:
+                newjet = newjet - muons[jet.muonIdx2].p4()
+                muon_pt += muons[jet.muonIdx2].pt
+
+            jet.pt              = newjet.Pt()
+            jet.rawFactor       = 0
+            jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+            jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+
+            ## setting jet back to original values
+            jet.pt          = jet_pt
+            jet.rawFactor   = rawFactor
+
+            # only correct the non-muon fraction of the jet for T1 MET. in fact, muon_pt should cancel out
+            jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt 
+            jet_pt_L1       = jet_pt_noMuL1     + muon_pt 
 
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
-            print jet_pt, jet_pt_raw, jet_pt_noMu, jet_pt_T1, jet.muEF
+            #print
+            #print "Next jet with:"
+            #print "{:10}{:<10.2f}".format("raw pt", jet_pt_raw)
+            #print "{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}".format("L1L2L3 pt", jet_pt_L1L2L3, "L1 pt", jet_pt_L1, "muEF", jet.muEF, "chEmEF", jet.chEmEF, "neEmEF", jet.neEmEF)
 
             # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
-            if jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
+            if jet_pt_L1L2L3 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9: # which one to use?
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
                 if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50):
 
-                    met_shift_x += (jet_pt_raw - jet_pt_T1) * jet_cosPhi
-                    met_shift_y += (jet_pt_raw - jet_pt_T1) * jet_sinPhi
+                    met_shift_x += (jet_pt_L1 - jet_pt_L1L2L3) * jet_cosPhi
+                    met_shift_y += (jet_pt_L1 - jet_pt_L1L2L3) * jet_sinPhi
+                    #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 x", jet_pt_L1*jet_cosPhi, "L1L2L3 x", jet_pt_L1L2L3*jet_cosPhi)
+                    #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 y", jet_pt_L1*jet_sinPhi, "L1L2L3 y", jet_pt_L1L2L3*jet_sinPhi)
+                    #print "{:10}{:<10.2f}{:10}{:<10.3f}{:10}{:<10.3f}".format("jet pt", jet_pt_L1L2L3, "x_shift", met_shift_x, "y_shift", met_shift_y)
 
         met_px_nom = raw_met_px + met_shift_x
         met_py_nom = raw_met_py + met_shift_y

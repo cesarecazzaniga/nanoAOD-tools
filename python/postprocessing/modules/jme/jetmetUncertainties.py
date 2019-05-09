@@ -119,7 +119,8 @@ class jetmetUncertaintiesProducer(Module):
             self.jesUncertainties.append("HEMIssue")
 
 	if self.redoJEC :
-	    self.jetReCalibrator = JetReCalibrator(globalTag, jetType , self.doResiduals, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
+	    self.jetReCalibrator    = JetReCalibrator(globalTag, jetType , self.doResiduals, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
+        self.jetReCalibratorL1  = JetReCalibrator(globalTag, jetType , False, self.jesInputFilePath, calculateSeparateCorrections = True, calculateType1METCorrection  = False, upToLevel=1)
 	
 
         # define energy threshold below which jets are considered as "unclustered energy"
@@ -280,16 +281,10 @@ class jetmetUncertaintiesProducer(Module):
         pass
 
     def analyze(self, event):
-        """process event, return True (go to next module) or False (fail,
-        go to next event)"""
-        jets = Collection(event, self.jetBranchName)
-        nJet = event.nJet
-        lowPtJets = Collection(event,
-                               "CorrT1METJet") if self.isV5NanoAOD else []
-        # to subtract out of the jets for proper type-1 MET corrections
-        muons = Collection(event, "Muon")
-        if not self.isData:
-            genJets = Collection(event, self.genJetBranchName)
+        """process event, return True (go to next module) or False (fail, go to next event)"""
+        jets = Collection(event, self.jetBranchName )
+        muons = Collection(event, "Muon" )
+        genJets = Collection(event, self.genJetBranchName )
 
         # prepare the low pt jets (they don't have a rawFactor)
         for jet in lowPtJets:
@@ -339,6 +334,7 @@ class jetmetUncertaintiesProducer(Module):
         if self.corrMET :
             met = Object(event, self.metBranchName)
             rawmet = Object(event, "RawMET")
+
             #( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
             ( met_px,         met_py         ) = ( rawmet.pt*math.cos(rawmet.phi), rawmet.pt*math.sin(rawmet.phi) )
             ( met_px_nom,     met_py_nom     ) = ( met_px, met_py )
@@ -420,29 +416,60 @@ class jetmetUncertaintiesProducer(Module):
             # (cf. https://twiki.cern.ch/twiki/bin/view/CMS/JetResolution and https://twiki.cern.ch/twiki/bin/view/CMSPublic/WorkBookJetEnergyResolution )
             ( jet_pt_jerNomVal, jet_pt_jerUpVal, jet_pt_jerDownVal ) = self.jetSmearer.getSmearValsPt(jet, genJet, rho)
 	    
-            jet_pt = jet.pt
+            jet_pt      = jet.pt
             jet_pt_orig = jet_pt
+            rawFactor   = jet.rawFactor
             if hasattr(jet, "rawFactor"):
                 jet_rawpt = jet.pt * (1 - jet.rawFactor)
             else:
                 jet_rawpt = -1.0 * jet.pt #If factor not present factor will be saved as -1
             
-            if self.redoJEC :
-                jet_pt      = self.jetReCalibrator.correct(jet,rho)
-                jet.pt      = jet_pt * ( 1 - jet.muEF )
-                jet_pt_noMu = self.jetReCalibrator.correct(jet,rho)
+            if self.redoJEC or True: # needs to run!
+                jet_pt          = self.jetReCalibrator.correct(jet,rho)
+                #jet.pt          = jet_rawpt * ( 1 - jet.muEF )
+                #jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
+
+                newjet = ROOT.TLorentzVector()
+                newjet.SetPtEtaPhiM(jet_pt_orig*(1-jet.rawFactor), jet.eta, jet.phi, jet.mass )
+                muon_pt = 0
+                if jet.muonIdx1>-1:
+                    newjet = newjet - muons[jet.muonIdx1].p4()
+                    muon_pt += muons[jet.muonIdx1].pt
+                if jet.muonIdx2>-1:
+                    newjet = newjet - muons[jet.muonIdx2].p4()
+                    muon_pt += muons[jet.muonIdx2].pt
+
+                jet.pt = newjet.Pt()
+                jet.rawFactor = 0
+                #jet.pt          = jet_pt_raw * ( 1 - jet.muEF )
+                #jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
+                jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+                jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+
+                ## setting jet back to original values
+                jet.pt          = jet_pt
+                jet.rawFactor   = rawFactor
+
+
+                #jet_pt_noMu     = self.jetReCalibrator.correct(jet,rho) if jet.pt > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
+
+                #jet.pt          = jet_pt_orig
+                #jet.rawFactor   = rawFactor
+
             jec = jet_pt/jet_rawpt
             jets_corr_JEC.append(jet_pt/jet_rawpt)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
+
             #jet_pt_nom           = jet_pt_jerNomVal *jet_pt
             jet_pt_nom      = jet_pt
-            jet_pt_T1       = jet_pt_noMu + jet.muEF*jet_rawpt
-            print jet_pt_orig, jet_rawpt, jet_pt_noMu, jet_pt_T1, jet.muEF
+            jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt
+            jet_pt_L1       = jet_pt_noMuL1     + muon_pt
+            #jet_pt_T1       = jet_pt_noMu + jet.muEF*jet_rawpt
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
-            jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt
-            jet_pt_jerDown       = jet_pt_jerDownVal*jet_pt
+            jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt_L1L2L3
+            jet_pt_jerDown       = jet_pt_jerDownVal*jet_pt_L1L2L3
             jets_pt_nom    .append(jet_pt_nom)
             jets_pt_jerUp  .append(jet_pt_jerUpVal*jet_pt)
             jets_pt_jerDown.append(jet_pt_jerDownVal*jet_pt)
@@ -645,32 +672,32 @@ class jetmetUncertaintiesProducer(Module):
                     jets_msdcorr_jesDown[jesUncertainty].append(jet_msdcorr_jesDown[jesUncertainty])                    
                 
                 # redo JES variations for T1 MET
-                self.jesUncertainty[jesUncertainty].setJetPt(jet_pt_T1)
+                self.jesUncertainty[jesUncertainty].setJetPt(jet_pt_L1L2L3)
                 self.jesUncertainty[jesUncertainty].setJetEta(jet.eta)
                 delta = self.jesUncertainty[jesUncertainty].getUncertainty(True)
-                jet_pt_jesUpT1[jesUncertainty]   = jet_pt_T1*(1. + delta)
-                jet_pt_jesDownT1[jesUncertainty] = jet_pt_T1*(1. - delta)
+                jet_pt_jesUpT1[jesUncertainty]   = jet_pt_L1L2L3*(1. + delta)
+                jet_pt_jesDownT1[jesUncertainty] = jet_pt_L1L2L3*(1. - delta)
 
 
             # progate JER and JES corrections and uncertainties to MET
-            if self.corrMET and jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
+            if self.corrMET and jet_pt_L1L2L3 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
                 if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1-jet.rawFactor)<50 ): # do not re-correct for jets that aren't included in METv2 recipe
                     jet_cosPhi = math.cos(jet.phi)
                     jet_sinPhi = math.sin(jet.phi)
                     #print "Correcting met_x %s by %s"%(met_px_nom, (jet_pt_nom - jet_pt_orig)*jet_cosPhi)
                     #print "Correcting met_y %s by %s"%(met_py_nom, (jet_pt_nom - jet_pt_orig)*jet_sinPhi)
                     #print jet_pt_T1, jet_pt_nom
-                    met_px_nom     = met_px_nom     - (jet_pt_T1     - jet_rawpt)*jet_cosPhi # correct from raw level
-                    met_py_nom     = met_py_nom     - (jet_pt_T1     - jet_rawpt)*jet_sinPhi # correct from raw level
-                    met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_rawpt)*jet_cosPhi
-                    met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_rawpt)*jet_sinPhi
-                    met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_rawpt)*jet_cosPhi
-                    met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_rawpt)*jet_sinPhi
+                    met_px_nom     = met_px_nom     - (jet_pt_L1L2L3     - jet_pt_L1)*jet_cosPhi # correct from L1 level
+                    met_py_nom     = met_py_nom     - (jet_pt_L1L2L3     - jet_pt_L1)*jet_sinPhi # correct from L1 level
+                    met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_pt_L1)*jet_cosPhi # needs to be checked/fixed. not used ATM
+                    met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_pt_L1)*jet_sinPhi # needs to be checked/fixed. not used ATM
+                    met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_pt_L1)*jet_cosPhi # needs to be checked/fixed. not used ATM
+                    met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_pt_L1)*jet_sinPhi # needs to be checked/fixed. not used ATM
                     for jesUncertainty in self.jesUncertainties:
-                        met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_rawpt)*jet_cosPhi
-                        met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_rawpt)*jet_sinPhi
-                        met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_rawpt)*jet_cosPhi
-                        met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_rawpt)*jet_sinPhi
+                        met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_pt_L1)*jet_cosPhi
+                        met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_pt_L1)*jet_sinPhi
+                        met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_pt_L1)*jet_cosPhi
+                        met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_pt_L1)*jet_sinPhi
 
         # propagate "unclustered energy" uncertainty to MET
         if self.metBranchName == 'METFixEE2017':
