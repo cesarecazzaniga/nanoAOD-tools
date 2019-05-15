@@ -84,8 +84,6 @@ class jetRecalib(Module):
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
-            print jet_pt, jet_pt_raw, jet_pt_noMu, jet_pt_T1, jet.muEF
-
             # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
             if jet_pt_T1 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
                 jet_cosPhi = math.cos(jet.phi)
