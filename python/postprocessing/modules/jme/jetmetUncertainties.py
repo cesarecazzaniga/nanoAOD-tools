@@ -434,7 +434,9 @@ class jetmetUncertaintiesProducer(Module):
             jets_corr_JEC.append(jet_pt/jet_rawpt)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
-            jet_pt_nom           = jet_pt_jerNomVal *jet_pt if self.doJERSmearing else jet_pt
+            #jet_pt_nom           = jet_pt_jerNomVal *jet_pt
+            jet_pt_nom      = jet_pt
+            jet_pt_T1       = jet_pt_noMu + jet.muEF*jet_rawpt
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt
