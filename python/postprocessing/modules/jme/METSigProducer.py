@@ -134,6 +134,10 @@ class METSigProducer(Module):
                 cov_xy += (dpt-dph)*cj*sj
                 cov_yy += dph*cj*cj + dpt*sj*sj
 
+                #if var == '_nom':
+                #    print getattr(j, jetPtVar)
+                #    print cov_xx, cov_xy, cov_yy
+
                 i += 1
 
             # unclustered energy
@@ -145,6 +149,8 @@ class METSigProducer(Module):
             else:
                 totalSumPt = metStd.sumPt + sumPtFromJets
 
+
+            #if var == '_nom': print 'sumPt', totalSumPt
             cov_tt = self.pars[5]**2 + self.pars[6]**2*totalSumPt
             cov_xx += cov_tt
             cov_yy += cov_tt
@@ -168,6 +174,9 @@ class METSigProducer(Module):
             met_y = met_pt * math.sin(met_phi)
 
             MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
+            #if var == '_nom':
+            #    print "MET pt,x,y", met_pt, met_x, met_y
+            #    print MET_sig
             #MET_sig_old = met.significance
 
             #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))

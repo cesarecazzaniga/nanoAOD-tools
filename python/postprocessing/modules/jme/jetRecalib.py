@@ -71,6 +71,7 @@ class jetRecalib(Module):
         jets    = Collection(event, self.jetBranchName )
         met     = Object(event, self.metBranchName) 
         rawmet  = Object(event, "RawMET") 
+        defmet  = Object(event, "MET") 
         muons   = Collection(event, "Muon") 
 
     def analyze(self, event):
@@ -83,11 +84,83 @@ class jetRecalib(Module):
         jets_pt_raw = []
         jets_pt_nom = []
         ( met_px,         met_py        ) = ( met.pt*math.cos(met.phi),         met.pt*math.sin(met.phi) )
+        ( def_met_px,     def_met_py    ) = ( defmet.pt*math.cos(defmet.phi),   defmet.pt*math.sin(defmet.phi) )
         ( raw_met_px,     raw_met_py    ) = ( rawmet.pt*math.cos(rawmet.phi),   rawmet.pt*math.sin(rawmet.phi) )
 
+        #print "Raw MET:", rawmet.pt
+        #print "Default MET:", defmet.pt
+        #print def_met_px, def_met_py, met_px, met_py
+
+
         rho = getattr(event, self.rhoBranchName)
+        ## need to get sth
+        #if self.metBranchName == 'METFixEE2017':
+        #    # subtract jets from met
+        #    delta_x_T1Jet = 0
+        #    delta_y_T1Jet = 0
+        #    delta_x_rawJet = 0
+        #    delta_y_rawJet = 0
+        #    for jet in jets:
+        #        jet_pt = jet.pt
+        #        jet_rawFactor = jet.rawFactor
+        #        newjet = ROOT.TLorentzVector()
+        #        newjet.SetPtEtaPhiM(jet.pt*(1-jet.rawFactor), jet.eta, jet.phi, jet.mass )
+        #        muon_pt = 0
+        #        if jet.muonIdx1>-1:
+        #            newjet = newjet - muons[jet.muonIdx1].p4()
+        #            muon_pt += muons[jet.muonIdx1].pt
+        #        if jet.muonIdx2>-1:
+        #            newjet = newjet - muons[jet.muonIdx2].p4()
+        #            muon_pt += muons[jet.muonIdx2].pt
+
+        #        jet.pt              = newjet.Pt()
+        #        jet.rawFactor       = 0
+
+        #        jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt
+        #        jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt
+
+        #        jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt
+        #        jet_pt_L1       = jet_pt_noMuL1     + muon_pt
+
+        #        jet.pt = jet_pt
+        #        jet.rawFactor = jet_rawFactor
+
+        #        if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50:
+        #            delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet.pt * math.cos(jet.phi)
+        #            delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet.pt * math.sin(jet.phi)
+
+        #        if jet.pt*(1 - jet.rawFactor) > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50:
+        #            delta_x_rawJet += jet.pt * math.cos(jet.phi)
+        #            delta_y_rawJet += jet.pt * math.sin(jet.phi)
+
+        #    # Remove T1 corrected jet from MET
+        #    print "Corrections from removing jets:", delta_x_T1Jet, delta_y_T1Jet
+        #    def_met_px += delta_x_T1Jet
+        #    def_met_py += delta_y_T1Jet
+
+        #    # Remove raw jet from RawMET
+        #    raw_met_px += delta_x_rawJet
+        #    raw_met_py += delta_y_rawJet
+
+
+        #    # get unclustered energy part
+        #    print "Corrections from unclustered energy:", def_met_px - met_px, def_met_py - met_py
+        #    met_unclEE_x = def_met_px - met_px
+        #    met_unclEE_y = def_met_py - met_py
+
+        #    # correct the rawMET
+        #    raw_met_px -= met_unclEE_x
+        #    raw_met_py -= met_unclEE_y
+
+        #    print "Default MET:", math.sqrt(def_met_px**2 + def_met_py**2)
+        #    print "MET Fix:", met.pt
+        #    print "Raw MET:", math.sqrt(raw_met_px**2+raw_met_py**2)
+            
+#        rho = getattr(event, self.rhoBranchName)
 
         met_shift_x, met_shift_y = 0., 0.
+        delta_x_T1Jet, delta_y_T1Jet = 0, 0
+        delta_x_rawJet, delta_y_rawJet = 0, 0
 
         for jet in jets:
             # copy the jet_pt from the tuple
@@ -114,9 +187,6 @@ class jetRecalib(Module):
             jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
             jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
 
-            ## setting jet back to original values
-            jet.pt          = jet_pt
-            jet.rawFactor   = rawFactor
 
             # only correct the non-muon fraction of the jet for T1 MET. in fact, muon_pt should cancel out
             jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt 
@@ -125,6 +195,24 @@ class jetRecalib(Module):
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
+
+            if self.metBranchName == 'METFixEE2017':
+                # get the delta for removing L1L2L3-L1 corrected jets in the EE region from the default MET branch.
+                # Right now this will only be correct if we reapply the same JECs,
+                # because there's no way to extract the L1L2L3 and L1 corrections that were actually used as input to the stored type1 MET...
+                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
+                    delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
+                    delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
+
+                # get the delta for removing raw jets in the EE region from the raw MET
+                #if jet.pt > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt < 50:
+                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
+                    delta_x_rawJet += jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
+                    delta_y_rawJet += jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
+
+            ## setting jet back to original values
+            jet.pt          = jet_pt
+            jet.rawFactor   = rawFactor
 
             #print
             #print "Next jet with:"
@@ -142,6 +230,25 @@ class jetRecalib(Module):
                     #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 x", jet_pt_L1*jet_cosPhi, "L1L2L3 x", jet_pt_L1L2L3*jet_cosPhi)
                     #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 y", jet_pt_L1*jet_sinPhi, "L1L2L3 y", jet_pt_L1L2L3*jet_sinPhi)
                     #print "{:10}{:<10.2f}{:10}{:<10.3f}{:10}{:<10.3f}".format("jet pt", jet_pt_L1L2L3, "x_shift", met_shift_x, "y_shift", met_shift_y)
+
+
+        if self.metBranchName == 'METFixEE2017':
+            # Remove the L1L2L3-L1 corrected jets in the EE region from the default MET branch
+            def_met_px += delta_x_T1Jet
+            def_met_py += delta_y_T1Jet
+
+            # Remove raw jets in the EE region from RawMET
+            raw_met_px += delta_x_rawJet
+            raw_met_py += delta_y_rawJet
+
+            # get unclustered energy part that is removed in the v2 recipe
+            met_unclEE_x = def_met_px - met_px
+            met_unclEE_y = def_met_py - met_py
+
+            # finalize the v2 recipe for the rawMET by removing the unclustered part in the EE region
+            raw_met_px -= met_unclEE_x
+            raw_met_py -= met_unclEE_y
+
 
         met_px_nom = raw_met_px + met_shift_x
         met_py_nom = raw_met_py + met_shift_y

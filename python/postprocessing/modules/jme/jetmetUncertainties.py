@@ -334,8 +334,10 @@ class jetmetUncertaintiesProducer(Module):
         if self.corrMET :
             met = Object(event, self.metBranchName)
             rawmet = Object(event, "RawMET")
+            defmet  = Object(event, "MET")
 
-            #( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
+            ( t1met_px,       t1met_py       ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
+            ( def_met_px,     def_met_py     ) = ( defmet.pt*math.cos(defmet.phi),   defmet.pt*math.sin(defmet.phi) )
             ( met_px,         met_py         ) = ( rawmet.pt*math.cos(rawmet.phi), rawmet.pt*math.sin(rawmet.phi) )
             ( met_px_nom,     met_py_nom     ) = ( met_px, met_py )
             ( met_px_jerUp,   met_py_jerUp   ) = ( met_px, met_py )
@@ -396,6 +398,10 @@ class jetmetUncertaintiesProducer(Module):
         delta_x_T1Jet, delta_y_T1Jet = 0, 0
         delta_x_rawJet, delta_y_rawJet = 0, 0
 
+             
+        delta_x_T1Jet, delta_y_T1Jet = 0, 0
+        delta_x_rawJet, delta_y_rawJet = 0, 0
+
         rho = getattr(event, self.rhoBranchName)
 
         # match reconstructed jets to generator level ones
@@ -426,8 +432,6 @@ class jetmetUncertaintiesProducer(Module):
             
             if self.redoJEC or True: # needs to run!
                 jet_pt          = self.jetReCalibrator.correct(jet,rho)
-                #jet.pt          = jet_rawpt * ( 1 - jet.muEF )
-                #jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
 
                 newjet = ROOT.TLorentzVector()
                 newjet.SetPtEtaPhiM(jet_pt_orig*(1-jet.rawFactor), jet.eta, jet.phi, jet.mass )
@@ -441,8 +445,6 @@ class jetmetUncertaintiesProducer(Module):
 
                 jet.pt = newjet.Pt()
                 jet.rawFactor = 0
-                #jet.pt          = jet_pt_raw * ( 1 - jet.muEF )
-                #jet.rawFactor   = 0 # set raw factor to zero for jetReCalibrator tool which otherwise applies the rawFactor again
                 jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
                 jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
 
@@ -450,22 +452,28 @@ class jetmetUncertaintiesProducer(Module):
                 jet.pt          = jet_pt
                 jet.rawFactor   = rawFactor
 
-
-                #jet_pt_noMu     = self.jetReCalibrator.correct(jet,rho) if jet.pt > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
-
-                #jet.pt          = jet_pt_orig
-                #jet.rawFactor   = rawFactor
-
             jec = jet_pt/jet_rawpt
             jets_corr_JEC.append(jet_pt/jet_rawpt)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
-
-            #jet_pt_nom           = jet_pt_jerNomVal *jet_pt
             jet_pt_nom      = jet_pt
             jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt
             jet_pt_L1       = jet_pt_noMuL1     + muon_pt
-            #jet_pt_T1       = jet_pt_noMu + jet.muEF*jet_rawpt
+
+            if self.metBranchName == 'METFixEE2017':
+                # get the delta for removing L1L2L3-L1 corrected jets in the EE region from the default MET branch.
+                # Right now this will only be correct if we reapply the same JECs,
+                # because there's no way to extract the L1L2L3 and L1 corrections that were actually used as input to the stored type1 MET...
+                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50:
+                    delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet_rawpt * math.cos(jet.phi)#jet_rawpt * math.cos(jet.phi)
+                    delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet_rawpt * math.sin(jet.phi)#jet_rawpt * math.sin(jet.phi)
+
+                # get the delta for removing raw jets in the EE region from the raw MET
+                #if jet.pt > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt < 50:
+                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50:
+                    delta_x_rawJet += jet_rawpt * math.cos(jet.phi)#jet_rawpt * math.cos(jet.phi)
+                    delta_y_rawJet += jet_rawpt * math.sin(jet.phi)#jet_rawpt * math.sin(jet.phi)
+
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt_L1L2L3
@@ -700,15 +708,56 @@ class jetmetUncertaintiesProducer(Module):
                         met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_pt_L1)*jet_sinPhi
 
         # propagate "unclustered energy" uncertainty to MET
-        if self.metBranchName == 'METFixEE2017':
-            # Remove the L1L2L3-L1 corrected jets in the EE region from the
-            # default MET branch
-            def_met_px += delta_x_T1Jet
-            def_met_py += delta_y_T1Jet
+        if self.corrMET :
 
-            # get unclustered energy part that is removed in the v2 recipe
-            met_unclEE_x = def_met_px - t1met_px
-            met_unclEE_y = def_met_py - t1met_py
+            if self.metBranchName == 'METFixEE2017':
+                # Remove the L1L2L3-L1 corrected jets in the EE region from the default MET branch
+                def_met_px += delta_x_T1Jet
+                def_met_py += delta_y_T1Jet
+
+                # get unclustered energy part that is removed in the v2 recipe
+                met_unclEE_x = def_met_px - t1met_px
+                met_unclEE_y = def_met_py - t1met_py
+
+                # finalize the v2 recipe for the rawMET by removing the unclustered part in the EE region
+                met_px_nom += delta_x_rawJet - met_unclEE_x 
+                met_py_nom += delta_y_rawJet - met_unclEE_y
+                
+                met_px_jerUp += delta_x_rawJet - met_unclEE_x
+                met_py_jerUp += delta_y_rawJet - met_unclEE_y
+                met_px_jerDown += delta_x_rawJet - met_unclEE_x
+                met_py_jerDown += delta_y_rawJet - met_unclEE_y
+                for jesUncertainty in self.jesUncertainties:
+                    met_px_jesUp[jesUncertainty] += delta_x_rawJet - met_unclEE_x
+                    met_py_jesUp[jesUncertainty] += delta_y_rawJet - met_unclEE_y
+                    met_px_jesDown[jesUncertainty] += delta_x_rawJet - met_unclEE_x
+                    met_py_jesDown[jesUncertainty] += delta_y_rawJet - met_unclEE_y
+                
+
+            ( met_px_unclEnUp,   met_py_unclEnUp   ) = ( met_px_nom, met_py_nom )
+            ( met_px_unclEnDown, met_py_unclEnDown ) = ( met_px_nom, met_py_nom )
+            met_deltaPx_unclEn = getattr(event, self.metBranchName + "_MetUnclustEnUpDeltaX")
+            met_deltaPy_unclEn = getattr(event, self.metBranchName + "_MetUnclustEnUpDeltaY")
+            met_px_unclEnUp    = met_px_unclEnUp   + met_deltaPx_unclEn
+            met_py_unclEnUp    = met_py_unclEnUp   + met_deltaPy_unclEn
+            met_px_unclEnDown  = met_px_unclEnDown - met_deltaPx_unclEn
+            met_py_unclEnDown  = met_py_unclEnDown - met_deltaPy_unclEn
+
+            ##### COMMENTED OUT - NO SMEARING USED ATM ####
+            ## propagate effect of jet energy smearing to MET
+            #met_px_jerUp   = met_px_jerUp   + (met_px_nom - met_px)
+            #met_py_jerUp   = met_py_jerUp   + (met_py_nom - met_py)
+            #met_px_jerDown = met_px_jerDown + (met_px_nom - met_px)
+            #met_py_jerDown = met_py_jerDown + (met_py_nom - met_py)
+            #for jesUncertainty in self.jesUncertainties:
+            #    met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   + (met_px_nom - met_px)
+            #    met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   + (met_py_nom - met_py)
+            #    met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] + (met_px_nom - met_px)
+            #    met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] + (met_py_nom - met_py)
+            #met_px_unclEnUp    = met_px_unclEnUp   + (met_px_nom - met_px)
+            #met_py_unclEnUp    = met_py_unclEnUp   + (met_py_nom - met_py)
+            #met_px_unclEnDown  = met_px_unclEnDown + (met_px_nom - met_px)
+            #met_py_unclEnDown  = met_py_unclEnDown + (met_py_nom - met_py)
 
             # finalize the v2 recipe for the rawMET by removing the unclustered
             # part in the EE region
