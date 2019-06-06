@@ -9,7 +9,7 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 
 class jetRecalib(Module):
-    def __init__(self,  globalTag, jetType = "AK4PFchs", METBranchName="MET", unclEnThreshold=15):
+    def __init__(self,  globalTag, archive, jetType = "AK4PFchs", METBranchName="MET"):
 
         self.metBranchName = METBranchName
         self.unclEnThreshold = unclEnThreshold
@@ -21,7 +21,8 @@ class jetRecalib(Module):
         else:
             raise ValueError("ERROR: Invalid jet type = '%s'!" % jetType)
         self.rhoBranchName = "fixedGridRhoFastjetAll"
-        self.lenVar = "n" + self.jetBranchName
+        self.lenVar = "n" + self.jetBranchName        
+        self.metBranchName = METBranchName
 
         self.jesInputArchivePath = os.environ['CMSSW_BASE'] + \
             "/src/PhysicsTools/NanoAODTools/data/jme/"
@@ -59,8 +60,10 @@ class jetRecalib(Module):
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
         self.out.branch("%s_pt_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
-        self.out.branch("%s_pt_nom"%self.metBranchName , "F")
-        self.out.branch("%s_phi_nom"%self.metBranchName, "F")
+        self.out.branch("%s_mass_raw" % self.jetBranchName, "F", lenVar=self.lenVar)
+        self.out.branch("%s_mass_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
+        self.out.branch("%s_pt_nom" % self.metBranchName, "F")
+        self.out.branch("%s_phi_nom" % self.metBranchName, "F")
             
                         
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
@@ -68,18 +71,8 @@ class jetRecalib(Module):
     
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
-        jets    = Collection(event, self.jetBranchName )
-        met     = Object(event, self.metBranchName) 
-        rawmet  = Object(event, "RawMET") 
-        defmet  = Object(event, "MET") 
-        muons   = Collection(event, "Muon") 
-
-    def analyze(self, event):
-        """process event, return True (go to next module) or False (fail,
-        go to next event)"""
-        jets = Collection(event, self.jetBranchName)
-        subJets = Collection(event, self.subJetBranchName)
-        met = Object(event, "MET")
+        jets = Collection(event, self.jetBranchName )
+        met = Object(event, self.metBranchName) 
 
         jets_pt_raw = []
         jets_pt_nom = []
@@ -126,31 +119,17 @@ class jetRecalib(Module):
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
-            if self.metBranchName == 'METFixEE2017':
-                # get the delta for removing L1L2L3-L1 corrected jets in the EE region from the default MET branch.
-                # Right now this will only be correct if we reapply the same JECs,
-                # because there's no way to extract the L1L2L3 and L1 corrections that were actually used as input to the stored type1 MET...
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
-                    delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
-                    delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
+            if hasattr(jet, "rawFactor"):
+                jet_rawpt = jet_pt * (1 - jet.rawFactor)
+            else:
+                jet_rawpt = -1.0 * jet_pt #If factor not present factor will be saved as -1. Done for consistency with jetmetUncertainty module, but why not put the rawpt to zero instead?
 
-                # get the delta for removing raw jets in the EE region from the raw MET
-                #if jet.pt > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt < 50:
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
-                    delta_x_rawJet += jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
-                    delta_y_rawJet += jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
+            jet_mass_nom         = jet_mass
+            if jet_mass_nom < 0.0:
+                jet_mass_nom *= -1.0
+            jets_mass_nom    .append(jet_mass_nom)
 
-            ## setting jet back to original values
-            jet.pt          = jet_pt
-            jet.rawFactor   = rawFactor
-
-            #print
-            #print "Next jet with:"
-            #print "{:10}{:<10.2f}".format("raw pt", jet_pt_raw)
-            #print "{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}".format("L1L2L3 pt", jet_pt_L1L2L3, "L1 pt", jet_pt_L1, "muEF", jet.muEF, "chEmEF", jet.chEmEF, "neEmEF", jet.neEmEF)
-
-            # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
-            if jet_pt_L1L2L3 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9: # which one to use?
+            if jet_pt_nom > 15. and not (self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50):
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
                 if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50):
@@ -184,6 +163,8 @@ class jetRecalib(Module):
         met_py_nom = raw_met_py + met_shift_y
 
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
+        self.out.fillBranch("%s_mass_raw" % self.jetBranchName, jets_mass_raw)
+        self.out.fillBranch("%s_mass_nom" % self.jetBranchName, jets_mass_nom)
         self.out.fillBranch("%s_pt_nom" % self.metBranchName, math.sqrt(met_px_nom**2 + met_py_nom**2))
         self.out.fillBranch("%s_phi_nom" % self.metBranchName, math.atan2(met_py_nom, met_px_nom))        
 

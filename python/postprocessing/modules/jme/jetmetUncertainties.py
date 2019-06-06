@@ -16,7 +16,7 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 
 class jetmetUncertaintiesProducer(Module):
-    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jer="Summer16_25nsV1", jetType = "AK4PFchs", redoJEC=False, doResiduals=True, noGroom=False, METBranchName='MET', unclEnThreshold=15):
+    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, noGroom=False, METBranchName='MET'):
 
         # globalTagProd only needs to be defined if METFixEE2017 is to be
         # recorrected, and should be the GT that was used for the production
@@ -75,14 +75,7 @@ class jetmetUncertaintiesProducer(Module):
         # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
         self.jesInputFilePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
         if len(jesUncertainties) == 1 and jesUncertainties[0] == "Total":
-            if self.era == "2016":
-                self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
-            elif self.era == "2017":
-                self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
-            elif self.era == "2018":
-                self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
-            else:
-                raise ValueError("ERROR: Invalid era = '%s'!" % self.era)
+            self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
         else:
             if self.era == "2016":
                 self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
@@ -687,25 +680,21 @@ class jetmetUncertaintiesProducer(Module):
                 jet_pt_jesDownT1[jesUncertainty] = jet_pt_L1L2L3*(1. - delta)
 
 
-            # progate JER and JES corrections and uncertainties to MET
-            if self.corrMET and jet_pt_L1L2L3 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9:
-                if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1-jet.rawFactor)<50 ): # do not re-correct for jets that aren't included in METv2 recipe
-                    jet_cosPhi = math.cos(jet.phi)
-                    jet_sinPhi = math.sin(jet.phi)
-                    #print "Correcting met_x %s by %s"%(met_px_nom, (jet_pt_nom - jet_pt_orig)*jet_cosPhi)
-                    #print "Correcting met_y %s by %s"%(met_py_nom, (jet_pt_nom - jet_pt_orig)*jet_sinPhi)
-                    #print jet_pt_T1, jet_pt_nom
-                    met_px_nom     = met_px_nom     - (jet_pt_L1L2L3     - jet_pt_L1)*jet_cosPhi # correct from L1 level
-                    met_py_nom     = met_py_nom     - (jet_pt_L1L2L3     - jet_pt_L1)*jet_sinPhi # correct from L1 level
-                    met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_pt_L1)*jet_cosPhi # needs to be checked/fixed. not used ATM
-                    met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_pt_L1)*jet_sinPhi # needs to be checked/fixed. not used ATM
-                    met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_pt_L1)*jet_cosPhi # needs to be checked/fixed. not used ATM
-                    met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_pt_L1)*jet_sinPhi # needs to be checked/fixed. not used ATM
-                    for jesUncertainty in self.jesUncertainties:
-                        met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_pt_L1)*jet_cosPhi
-                        met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUpT1[jesUncertainty]   - jet_pt_L1)*jet_sinPhi
-                        met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_pt_L1)*jet_cosPhi
-                        met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDownT1[jesUncertainty] - jet_pt_L1)*jet_sinPhi
+            # propagate JER and JES corrections and uncertainties to MET
+            if self.corrMET and jet_pt_nom > self.unclEnThreshold and not (self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50):
+                jet_cosPhi = math.cos(jet.phi)
+                jet_sinPhi = math.sin(jet.phi)
+                met_px_nom = met_px_nom - (jet_pt_nom - jet_pt)*jet_cosPhi
+                met_py_nom = met_py_nom - (jet_pt_nom - jet_pt)*jet_sinPhi
+                met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_cosPhi
+                met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_sinPhi
+                met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_pt_nom)*jet_cosPhi
+                met_py_jerDown = met_py_jerDown - (jet_pt_jerDown - jet_pt_nom)*jet_sinPhi
+                for jesUncertainty in self.jesUncertainties:
+                    met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   - (jet_pt_jesUp[jesUncertainty]   - jet_pt_nom)*jet_cosPhi
+                    met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   - (jet_pt_jesUp[jesUncertainty]   - jet_pt_nom)*jet_sinPhi
+                    met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] - (jet_pt_jesDown[jesUncertainty] - jet_pt_nom)*jet_cosPhi
+                    met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] - (jet_pt_jesDown[jesUncertainty] - jet_pt_nom)*jet_sinPhi
 
         # propagate "unclustered energy" uncertainty to MET
         if self.corrMET :
