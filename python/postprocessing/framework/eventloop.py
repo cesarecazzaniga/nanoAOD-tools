@@ -3,7 +3,7 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.treeReaderArrayTools imp
 import sys, time
 import ROOT
 
-class Module:
+class Module(object):
     def __init__(self):
         self.writeHistFile=False
     def beginJob(self,histFile=None,histDirName=None):
@@ -51,7 +51,7 @@ def eventLoop(modules, inputFile, outputFile, inputTree, wrappedOutputTree, maxE
     entries = inputTree.entries
 
     for i in xrange(entries) if eventRange == None else eventRange:
-        if maxEvents > 0 and i >= maxEvents-1: break
+        if maxEvents > 0 and i >= maxEvents: break
         e = Event(inputTree,i)
         clearExtraBranches(inputTree)
         doneEvents += 1
