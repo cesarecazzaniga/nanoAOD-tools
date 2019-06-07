@@ -85,6 +85,16 @@ class jetRecalib(Module):
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
+            if hasattr(jet, "rawFactor"):
+                jet_rawpt = jet_pt * (1 - jet.rawFactor)
+            else:
+                jet_rawpt = -1.0 * jet_pt #If factor not present factor will be saved as -1. Done for consistency with jetmetUncertainty module, but why not put the rawpt to zero instead?
+
+            jet_mass_nom         = jet_mass
+            if jet_mass_nom < 0.0:
+                jet_mass_nom *= -1.0
+            jets_mass_nom    .append(jet_mass_nom)
+
             if jet_pt_nom > 15. and not (self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50):
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
