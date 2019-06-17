@@ -16,7 +16,7 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 
 class jetmetUncertaintiesProducer(Module):
-    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, noGroom=False, METBranchName='MET'):
+    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, noGroom=False, doJERSmearing=False, METBranchName='MET'):
 
         # globalTagProd only needs to be defined if METFixEE2017 is to be
         # recorrected, and should be the GT that was used for the production
@@ -449,24 +449,7 @@ class jetmetUncertaintiesProducer(Module):
             jets_corr_JEC.append(jet_pt/jet_rawpt)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
-            jet_pt_nom      = jet_pt
-            jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt
-            jet_pt_L1       = jet_pt_noMuL1     + muon_pt
-
-            if self.metBranchName == 'METFixEE2017':
-                # get the delta for removing L1L2L3-L1 corrected jets in the EE region from the default MET branch.
-                # Right now this will only be correct if we reapply the same JECs,
-                # because there's no way to extract the L1L2L3 and L1 corrections that were actually used as input to the stored type1 MET...
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50:
-                    delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet_rawpt * math.cos(jet.phi)#jet_rawpt * math.cos(jet.phi)
-                    delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet_rawpt * math.sin(jet.phi)#jet_rawpt * math.sin(jet.phi)
-
-                # get the delta for removing raw jets in the EE region from the raw MET
-                #if jet.pt > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt < 50:
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50:
-                    delta_x_rawJet += jet_rawpt * math.cos(jet.phi)#jet_rawpt * math.cos(jet.phi)
-                    delta_y_rawJet += jet_rawpt * math.sin(jet.phi)#jet_rawpt * math.sin(jet.phi)
-
+            jet_pt_nom           = jet_pt_jerNomVal *jet_pt if doJERSmearing else jet_pt
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt_L1L2L3
