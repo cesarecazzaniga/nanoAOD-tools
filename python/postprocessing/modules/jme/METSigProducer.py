@@ -120,12 +120,13 @@ class METSigProducer(Module):
             i = 0
             for j in cleanJets:
                 if not j.cleanmask>0: continue
-                index = self.getBin(abs(j.eta))
+                index       = self.getBin(abs(j.eta))
+                jet_index   = 0 if getattr(j, jetPtVar) < 40 else 1 # split into high/low pt jets
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[index] * getattr(j, jetPtVar) * j.dpt
-                dph =                    getattr(j, jetPtVar) * j.dphi
+                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar) * j.dpt
+                dph =                                  getattr(j, jetPtVar) * j.dphi
 
                 dpt *= dpt
                 dph *= dph
@@ -151,7 +152,7 @@ class METSigProducer(Module):
 
 
             #if var == '_nom': print 'sumPt', totalSumPt
-            cov_tt = self.pars[5]**2 + self.pars[6]**2*totalSumPt
+            cov_tt = self.pars[10]**2 + self.pars[11]**2*totalSumPt
             cov_xx += cov_tt
             cov_yy += cov_tt
 
