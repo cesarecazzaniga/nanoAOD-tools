@@ -11,7 +11,7 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 class METSigProducer(Module):
 
-    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15.):
+    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10)):
         jetCorrParam = ROOT.JetCorrectorParameters()
 
         self.pars               = parameters
@@ -23,6 +23,7 @@ class METSigProducer(Module):
         self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
         self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
         self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
+        self.vetoEtaRegion      = vetoEtaRegion
         ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
 
 
@@ -100,12 +101,14 @@ class METSigProducer(Module):
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
-                        if l.pt > 10 and self.deltaR(j, l) < 0.4: clean = False
+                        if l.pt > 10 and self.deltaR(j, l) < 0.4:
+                            clean = False
                 if clean:
-                    if getattr(j, jetPtVar) > self.jetThreshold:
-                        cleanJets += [j]
-                    else:
-                        sumPtFromJets += getattr(j, jetPtVar)
+                    if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
+                        if getattr(j, jetPtVar) > self.jetThreshold:
+                            cleanJets += [j]
+                        else:
+                            sumPtFromJets += getattr(j, jetPtVar)
 
             # get the JER
             jet = ROOT.JME.JetParameters()
@@ -119,7 +122,6 @@ class METSigProducer(Module):
             cov_yy  = 0
             i = 0
             for j in cleanJets:
-                if not j.cleanmask>0: continue
                 index       = self.getBin(abs(j.eta))
                 jet_index   = 0 if getattr(j, jetPtVar) < 40 else 1 # split into high/low pt jets
 
@@ -151,7 +153,6 @@ class METSigProducer(Module):
                 totalSumPt = metStd.sumPt + sumPtFromJets
 
 
-            #if var == '_nom': print 'sumPt', totalSumPt
             cov_tt = self.pars[10]**2 + self.pars[11]**2*totalSumPt
             cov_xx += cov_tt
             cov_yy += cov_tt
@@ -179,7 +180,6 @@ class METSigProducer(Module):
             #    print "MET pt,x,y", met_pt, met_x, met_y
             #    print MET_sig
             #MET_sig_old = met.significance
-
             #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
             if var == '' or var == '_nom':
                 self.out.fillBranch("MET_significance", MET_sig)
