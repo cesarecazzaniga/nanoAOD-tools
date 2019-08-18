@@ -40,7 +40,7 @@ class METSigProducer(Module):
         self.out = wrappedOutputTree
         self.out.branch("MET_significance", "F")
         if self.calcVariations:
-            for var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
+            for var in ['_jesTotalUp', '_jesTotalDown', '_jer', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
                 self.out.branch("MET_significance"+var, "F")
         #self.out.branch("MET_significance_nom", "F")
 
@@ -83,13 +83,13 @@ class METSigProducer(Module):
         else: variations = ['']
 
         if self.calcVariations:
-            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']
+            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
 
         jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
 
         for var in variations:
             # no unclustered energy uncertainty for jets
-            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown']:
+            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_jer']:
                 jetPtVar = 'pt'+var
             metPtVar = 'pt'+var
             phiVar = 'phi'+var

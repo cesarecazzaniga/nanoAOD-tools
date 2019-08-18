@@ -200,8 +200,23 @@ class jetmetUncertaintiesProducer(Module):
                         "F",
                         lenVar=self.lenVar)
 
-        self.out.branch("%s_T1_pt" % self.metBranchName, "F")
-        self.out.branch("%s_T1_phi" % self.metBranchName, "F")
+        if self.doGroomed:
+            self.out.branch("%s_msoftdrop_raw" % self.jetBranchName, "F", lenVar=self.lenVar)
+            self.out.branch("%s_msoftdrop_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
+            self.out.branch("%s_msoftdrop_corr_JMR" % self.jetBranchName, "F", lenVar=self.lenVar)
+            
+        if self.corrMET:
+            self.out.branch("%s_pt_nom" % self.metBranchName, "F")
+            self.out.branch("%s_phi_nom" % self.metBranchName, "F")
+            self.out.branch("%s_pt_jer" % self.metBranchName, "F")
+            self.out.branch("%s_phi_jer" % self.metBranchName, "F")
+        
+        self.out.branch("%s_pt_jer" % self.jetBranchName, "F", lenVar=self.lenVar)
+        for shift in [ "Up", "Down" ]:
+            self.out.branch("%s_pt_jer%s" % (self.jetBranchName, shift), "F", lenVar=self.lenVar)
+            self.out.branch("%s_mass_jer%s" % (self.jetBranchName, shift), "F", lenVar=self.lenVar)
+            self.out.branch("%s_mass_jmr%s" % (self.jetBranchName, shift), "F", lenVar=self.lenVar)
+            self.out.branch("%s_mass_jms%s" % (self.jetBranchName, shift), "F", lenVar=self.lenVar)
 
         if not self.isData:
             self.out.branch("%s_T1Smear_pt" % self.metBranchName, "F")
@@ -302,7 +317,10 @@ class jetmetUncertaintiesProducer(Module):
         jets_corr_JEC = []
         jets_corr_JER = []
 
-        jets_pt_jesUp = {}
+        jets_pt_jer     = []
+        jets_pt_jerUp   = []
+        jets_pt_jerDown = []
+        jets_pt_jesUp   = {}
         jets_pt_jesDown = {}
 
         jets_mass_jesUp = {}
@@ -326,13 +344,9 @@ class jetmetUncertaintiesProducer(Module):
 
         if self.corrMET :
             met = Object(event, self.metBranchName)
-            rawmet = Object(event, "RawMET")
-            defmet  = Object(event, "MET")
-
-            ( t1met_px,       t1met_py       ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
-            ( def_met_px,     def_met_py     ) = ( defmet.pt*math.cos(defmet.phi),   defmet.pt*math.sin(defmet.phi) )
-            ( met_px,         met_py         ) = ( rawmet.pt*math.cos(rawmet.phi), rawmet.pt*math.sin(rawmet.phi) )
-            ( met_px_nom,     met_py_nom     ) = ( met_px, met_py )
+            ( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
+            ( met_px_nom, met_py_nom ) = ( met_px, met_py )
+            ( met_px_jer,     met_py_jer     ) = ( met_px, met_py )
             ( met_px_jerUp,   met_py_jerUp   ) = ( met_px, met_py )
             ( met_px_jerDown, met_py_jerDown ) = ( met_px, met_py )
             ( met_px_jesUp,   met_py_jesUp   ) = ( {}, {} )
@@ -452,9 +466,11 @@ class jetmetUncertaintiesProducer(Module):
             jet_pt_nom           = jet_pt_jerNomVal *jet_pt if self.doJERSmearing else jet_pt
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
-            jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt_L1L2L3
-            jet_pt_jerDown       = jet_pt_jerDownVal*jet_pt_L1L2L3
+            jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt
+            jet_pt_jerDown       = jet_pt_jerDownVal*jet_pt
+            jet_pt_jer           = jet_pt_jerNomVal *jet_pt
             jets_pt_nom    .append(jet_pt_nom)
+            jets_pt_jer    .append(jet_pt_jerNomVal*jet_pt)
             jets_pt_jerUp  .append(jet_pt_jerUpVal*jet_pt)
             jets_pt_jerDown.append(jet_pt_jerDownVal*jet_pt)
             # evaluate JES uncertainties
@@ -669,6 +685,8 @@ class jetmetUncertaintiesProducer(Module):
                 jet_sinPhi = math.sin(jet.phi)
                 met_px_nom = met_px_nom - (jet_pt_nom - jet_pt)*jet_cosPhi
                 met_py_nom = met_py_nom - (jet_pt_nom - jet_pt)*jet_sinPhi
+                met_px_jer     = met_px_jer   - (jet_pt_jer   - jet_pt_nom)*jet_cosPhi
+                met_py_jer     = met_py_jer   - (jet_pt_jer   - jet_pt_nom)*jet_sinPhi
                 met_px_jerUp   = met_px_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_cosPhi
                 met_py_jerUp   = met_py_jerUp   - (jet_pt_jerUp   - jet_pt_nom)*jet_sinPhi
                 met_px_jerDown = met_px_jerDown - (jet_pt_jerDown - jet_pt_nom)*jet_cosPhi
@@ -715,247 +733,65 @@ class jetmetUncertaintiesProducer(Module):
             met_px_unclEnDown  = met_px_unclEnDown - met_deltaPx_unclEn
             met_py_unclEnDown  = met_py_unclEnDown - met_deltaPy_unclEn
 
-            ##### COMMENTED OUT - NO SMEARING USED ATM ####
-            ## propagate effect of jet energy smearing to MET
-            #met_px_jerUp   = met_px_jerUp   + (met_px_nom - met_px)
-            #met_py_jerUp   = met_py_jerUp   + (met_py_nom - met_py)
-            #met_px_jerDown = met_px_jerDown + (met_px_nom - met_px)
-            #met_py_jerDown = met_py_jerDown + (met_py_nom - met_py)
-            #for jesUncertainty in self.jesUncertainties:
-            #    met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   + (met_px_nom - met_px)
-            #    met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   + (met_py_nom - met_py)
-            #    met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] + (met_px_nom - met_px)
-            #    met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] + (met_py_nom - met_py)
-            #met_px_unclEnUp    = met_px_unclEnUp   + (met_px_nom - met_px)
-            #met_py_unclEnUp    = met_py_unclEnUp   + (met_py_nom - met_py)
-            #met_px_unclEnDown  = met_px_unclEnDown + (met_px_nom - met_px)
-            #met_py_unclEnDown  = met_py_unclEnDown + (met_py_nom - met_py)
-
-            # finalize the v2 recipe for the rawMET by removing the unclustered
-            # part in the EE region
-            met_T1_px += delta_x_rawJet - met_unclEE_x
-            met_T1_py += delta_y_rawJet - met_unclEE_y
-
-            if not self.isData:
-                # apply v2 recipe correction factor also to JER central value
-                # and variations
-                met_T1Smear_px += delta_x_rawJet - met_unclEE_x
-                met_T1Smear_py += delta_y_rawJet - met_unclEE_y
-
-            if 'T1' in self.saveMETUncs:
-                for jerID in self.splitJERIDs:
-                    met_T1_px_jerUp[jerID] += delta_x_rawJet - met_unclEE_x
-                    met_T1_py_jerUp[jerID] += delta_y_rawJet - met_unclEE_y
-                    met_T1_px_jerDown[jerID] += delta_x_rawJet - met_unclEE_x
-                    met_T1_py_jerDown[jerID] += delta_y_rawJet - met_unclEE_y
-
-                for jesUncertainty in self.jesUncertainties:
-                    met_T1_px_jesUp[jesUncertainty] += delta_x_rawJet - \
-                        met_unclEE_x
-                    met_T1_py_jesUp[jesUncertainty] += delta_y_rawJet - \
-                        met_unclEE_y
-                    met_T1_px_jesDown[jesUncertainty] += delta_x_rawJet - \
-                        met_unclEE_x
-                    met_T1_py_jesDown[jesUncertainty] += delta_y_rawJet - \
-                        met_unclEE_y
-
-            if 'T1Smear' in self.saveMETUncs:
-                for jerID in self.splitJERIDs:
-                    met_T1Smear_px_jerUp[jerID] += delta_x_rawJet - \
-                        met_unclEE_x
-                    met_T1Smear_py_jerUp[jerID] += delta_y_rawJet - \
-                        met_unclEE_y
-                    met_T1Smear_px_jerDown[jerID] += delta_x_rawJet - \
-                        met_unclEE_x
-                    met_T1Smear_py_jerDown[jerID] += delta_y_rawJet - \
-                        met_unclEE_y
-
-                for jesUncertainty in self.jesUncertainties:
-                    met_T1Smear_px_jesUp[jesUncertainty] += delta_x_rawJet - \
-                        met_unclEE_x
-                    met_T1Smear_py_jesUp[jesUncertainty] += delta_y_rawJet - \
-                        met_unclEE_y
-                    met_T1Smear_px_jesDown[
-                        jesUncertainty] += delta_x_rawJet - met_unclEE_x
-                    met_T1Smear_py_jesDown[
-                        jesUncertainty] += delta_y_rawJet - met_unclEE_y
-
-        if not self.isData:
-            (met_T1_px_unclEnUp, met_T1_py_unclEnUp) = (met_T1_px, met_T1_py)
-            (met_T1_px_unclEnDown, met_T1_py_unclEnDown) = (met_T1_px, met_T1_py)
-            (met_T1Smear_px_unclEnUp, met_T1Smear_py_unclEnUp) = (met_T1Smear_px, met_T1Smear_py)
-            (met_T1Smear_px_unclEnDown, met_T1Smear_py_unclEnDown) = (met_T1Smear_px, met_T1Smear_py)
-            met_deltaPx_unclEn = getattr(
-                event, self.metBranchName + "_MetUnclustEnUpDeltaX")
-            met_deltaPy_unclEn = getattr(
-                event, self.metBranchName + "_MetUnclustEnUpDeltaY")
-            met_T1_px_unclEnUp = met_T1_px_unclEnUp + met_deltaPx_unclEn
-            met_T1_py_unclEnUp = met_T1_py_unclEnUp + met_deltaPy_unclEn
-            met_T1_px_unclEnDown = met_T1_px_unclEnDown - met_deltaPx_unclEn
-            met_T1_py_unclEnDown = met_T1_py_unclEnDown - met_deltaPy_unclEn
-            met_T1Smear_px_unclEnUp = met_T1Smear_px_unclEnUp + met_deltaPx_unclEn
-            met_T1Smear_py_unclEnUp = met_T1Smear_py_unclEnUp + met_deltaPy_unclEn
-            met_T1Smear_px_unclEnDown = met_T1Smear_px_unclEnDown - met_deltaPx_unclEn
-            met_T1Smear_py_unclEnDown = met_T1Smear_py_unclEnDown - met_deltaPy_unclEn
+            # propagate effect of jet energy smearing to MET           
+            met_px_jer     = met_px_jer   + (met_px_nom - met_px)
+            met_py_jer     = met_py_jer   + (met_py_nom - met_py)
+            met_px_jerUp   = met_px_jerUp   + (met_px_nom - met_px)
+            met_py_jerUp   = met_py_jerUp   + (met_py_nom - met_py)
+            met_px_jerDown = met_px_jerDown + (met_px_nom - met_px)
+            met_py_jerDown = met_py_jerDown + (met_py_nom - met_py)
+            for jesUncertainty in self.jesUncertainties:
+                met_px_jesUp[jesUncertainty]   = met_px_jesUp[jesUncertainty]   + (met_px_nom - met_px)
+                met_py_jesUp[jesUncertainty]   = met_py_jesUp[jesUncertainty]   + (met_py_nom - met_py)
+                met_px_jesDown[jesUncertainty] = met_px_jesDown[jesUncertainty] + (met_px_nom - met_px)
+                met_py_jesDown[jesUncertainty] = met_py_jesDown[jesUncertainty] + (met_py_nom - met_py)
+            met_px_unclEnUp    = met_px_unclEnUp   + (met_px_nom - met_px)
+            met_py_unclEnUp    = met_py_unclEnUp   + (met_py_nom - met_py)
+            met_px_unclEnDown  = met_px_unclEnDown + (met_px_nom - met_px)
+            met_py_unclEnDown  = met_py_unclEnDown + (met_py_nom - met_py)
 
         self.out.fillBranch("%s_pt_raw" % self.jetBranchName, jets_pt_raw)
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
         self.out.fillBranch("%s_corr_JEC" % self.jetBranchName, jets_corr_JEC)
         self.out.fillBranch("%s_corr_JER" % self.jetBranchName, jets_corr_JER)
-        if not self.isData:
-            for jerID in self.splitJERIDs:
-                self.out.fillBranch(
-                    "%s_pt_jer%sUp" % (self.jetBranchName, jerID),
-                    jets_pt_jerUp[jerID])
-                self.out.fillBranch(
-                    "%s_pt_jer%sDown" % (self.jetBranchName, jerID),
-                    jets_pt_jerDown[jerID])
-
-        self.out.fillBranch("%s_T1_pt" % self.metBranchName,
-                            math.sqrt(met_T1_px**2 + met_T1_py**2))
-        self.out.fillBranch("%s_T1_phi" % self.metBranchName,
-                            math.atan2(met_T1_py, met_T1_px))
-
+        self.out.fillBranch("%s_pt_jer" % self.jetBranchName, jets_pt_jer)
+        self.out.fillBranch("%s_pt_jerUp" % self.jetBranchName, jets_pt_jerUp)
+        self.out.fillBranch("%s_pt_jerDown" % self.jetBranchName, jets_pt_jerDown)
         self.out.fillBranch("%s_mass_raw" % self.jetBranchName, jets_mass_raw)
         self.out.fillBranch("%s_mass_nom" % self.jetBranchName, jets_mass_nom)
 
-        if not self.isData:
-            for jerID in self.splitJERIDs:
-                self.out.fillBranch(
-                    "%s_mass_jer%sUp" % (self.jetBranchName, jerID),
-                    jets_mass_jerUp[jerID])
-                self.out.fillBranch(
-                    "%s_mass_jer%sDown" % (self.jetBranchName, jerID),
-                    jets_mass_jerDown[jerID])
-
-        if not self.isData:
-            self.out.fillBranch(
-                "%s_T1Smear_pt" % self.metBranchName,
-                math.sqrt(met_T1Smear_px**2 + met_T1Smear_py**2))
-            self.out.fillBranch("%s_T1Smear_phi" % self.metBranchName,
-                                math.atan2(met_T1Smear_py, met_T1Smear_px))
-
-            if 'T1' in self.saveMETUncs:
-                for jerID in self.splitJERIDs:
-                    self.out.fillBranch(
-                        "%s_T1_pt_jer%sUp" % (self.metBranchName, jerID),
-                        math.sqrt(met_T1_px_jerUp[jerID]**2 +
-                                  met_T1_py_jerUp[jerID]**2))
-                    self.out.fillBranch(
-                        "%s_T1_phi_jer%sUp" % (self.metBranchName, jerID),
-                        math.atan2(met_T1_py_jerUp[jerID],
-                                   met_T1_px_jerUp[jerID]))
-                    self.out.fillBranch(
-                        "%s_T1_pt_jer%sDown" % (self.metBranchName, jerID),
-                        math.sqrt(met_T1_px_jerDown[jerID]**2 +
-                                  met_T1_py_jerDown[jerID]**2))
-                    self.out.fillBranch(
-                        "%s_T1_phi_jer%sDown" % (self.metBranchName, jerID),
-                        math.atan2(met_T1_py_jerDown[jerID],
-                                   met_T1_px_jerDown[jerID]))
-
-            if 'T1Smear' in self.saveMETUncs:
-                for jerID in self.splitJERIDs:
-                    self.out.fillBranch(
-                        "%s_T1Smear_pt_jer%sUp" % (self.metBranchName, jerID),
-                        math.sqrt(met_T1Smear_px_jerUp[jerID]**2 +
-                                  met_T1Smear_py_jerUp[jerID]**2))
-                    self.out.fillBranch(
-                        "%s_T1Smear_phi_jer%sUp" % (self.metBranchName, jerID),
-                        math.atan2(met_T1Smear_py_jerUp[jerID],
-                                   met_T1Smear_px_jerUp[jerID]))
-                    self.out.fillBranch(
-                        "%s_T1Smear_pt_jer%sDown" %
-                        (self.metBranchName, jerID),
-                        math.sqrt(met_T1Smear_px_jerDown[jerID]**2 +
-                                  met_T1Smear_py_jerDown[jerID]**2))
-                    self.out.fillBranch(
-                        "%s_T1Smear_phi_jer%sDown" %
-                        (self.metBranchName, jerID),
-                        math.atan2(met_T1Smear_py_jerDown[jerID],
-                                   met_T1Smear_px_jerDown[jerID]))
-
-            for jesUncertainty in self.jesUncertainties:
-                self.out.fillBranch(
-                    "%s_pt_jes%sUp" % (self.jetBranchName, jesUncertainty),
-                    jets_pt_jesUp[jesUncertainty])
-                self.out.fillBranch(
-                    "%s_pt_jes%sDown" % (self.jetBranchName, jesUncertainty),
-                    jets_pt_jesDown[jesUncertainty])
-
-                if 'T1' in self.saveMETUncs:
-                    self.out.fillBranch(
-                        "%s_T1_pt_jes%sUp" %
-                        (self.metBranchName, jesUncertainty),
-                        math.sqrt(met_T1_px_jesUp[jesUncertainty]**2 +
-                                  met_T1_py_jesUp[jesUncertainty]**2))
-                    self.out.fillBranch(
-                        "%s_T1_phi_jes%sUp" %
-                        (self.metBranchName, jesUncertainty),
-                        math.atan2(met_T1_py_jesUp[jesUncertainty],
-                                   met_T1_px_jesUp[jesUncertainty]))
-                    self.out.fillBranch(
-                        "%s_T1_pt_jes%sDown" %
-                        (self.metBranchName, jesUncertainty),
-                        math.sqrt(met_T1_px_jesDown[jesUncertainty]**2 +
-                                  met_T1_py_jesDown[jesUncertainty]**2))
-                    self.out.fillBranch(
-                        "%s_T1_phi_jes%sDown" %
-                        (self.metBranchName, jesUncertainty),
-                        math.atan2(met_T1_py_jesDown[jesUncertainty],
-                                   met_T1_px_jesDown[jesUncertainty]))
-
-                if 'T1Smear' in self.saveMETUncs:
-                    self.out.fillBranch(
-                        "%s_T1Smear_pt_jes%sUp" %
-                        (self.metBranchName, jesUncertainty),
-                        math.sqrt(met_T1Smear_px_jesUp[jesUncertainty]**2 +
-                                  met_T1Smear_py_jesUp[jesUncertainty]**2))
-                    self.out.fillBranch(
-                        "%s_T1Smear_phi_jes%sUp" %
-                        (self.metBranchName, jesUncertainty),
-                        math.atan2(met_T1Smear_py_jesUp[jesUncertainty],
-                                   met_T1Smear_px_jesUp[jesUncertainty]))
-                    self.out.fillBranch(
-                        "%s_T1Smear_pt_jes%sDown" %
-                        (self.metBranchName, jesUncertainty),
-                        math.sqrt(met_T1Smear_px_jesDown[jesUncertainty]**2 +
-                                  met_T1Smear_py_jesDown[jesUncertainty]**2))
-                    self.out.fillBranch(
-                        "%s_T1Smear_phi_jes%sDown" %
-                        (self.metBranchName, jesUncertainty),
-                        math.atan2(met_T1Smear_py_jesDown[jesUncertainty],
-                                   met_T1Smear_px_jesDown[jesUncertainty]))
-
-                self.out.fillBranch(
-                    "%s_mass_jes%sUp" % (self.jetBranchName, jesUncertainty),
-                    jets_mass_jesUp[jesUncertainty])
-                self.out.fillBranch(
-                    "%s_mass_jes%sDown" % (self.jetBranchName, jesUncertainty),
-                    jets_mass_jesDown[jesUncertainty])
-
-            self.out.fillBranch(
-                "%s_T1_pt_unclustEnUp" % self.metBranchName,
-                math.sqrt(met_T1_px_unclEnUp**2 + met_T1_py_unclEnUp**2))
-            self.out.fillBranch("%s_T1_phi_unclustEnUp" % self.metBranchName,
-                                math.atan2(met_T1_py_unclEnUp, met_T1_px_unclEnUp))
-            self.out.fillBranch(
-                "%s_T1_pt_unclustEnDown" % self.metBranchName,
-                math.sqrt(met_T1_px_unclEnDown**2 + met_T1_py_unclEnDown**2))
-            self.out.fillBranch(
-                "%s_T1_phi_unclustEnDown" % self.metBranchName,
-                math.atan2(met_T1_py_unclEnDown, met_T1_px_unclEnDown))
-            self.out.fillBranch(
-                "%s_T1Smear_pt_unclustEnUp" % self.metBranchName,
-                math.sqrt(met_T1Smear_px_unclEnUp**2 + met_T1Smear_py_unclEnUp**2))
-            self.out.fillBranch("%s_T1Smear_phi_unclustEnUp" % self.metBranchName,
-                                math.atan2(met_T1Smear_py_unclEnUp, met_T1Smear_px_unclEnUp))
-            self.out.fillBranch(
-                "%s_T1Smear_pt_unclustEnDown" % self.metBranchName,
-                math.sqrt(met_T1Smear_px_unclEnDown**2 + met_T1Smear_py_unclEnDown**2))
-            self.out.fillBranch(
-                "%s_T1Smear_phi_unclustEnDown" % self.metBranchName,
-                math.atan2(met_T1Smear_py_unclEnDown, met_T1Smear_px_unclEnDown))
+            
+        if self.corrMET :
+            self.out.fillBranch("%s_pt_nom" % self.metBranchName, math.sqrt(met_px_nom**2 + met_py_nom**2))
+            self.out.fillBranch("%s_phi_nom" % self.metBranchName, math.atan2(met_py_nom, met_px_nom))        
+            self.out.fillBranch("%s_pt_jer" % self.metBranchName, math.sqrt(met_px_jer**2 + met_py_jer**2))
+            self.out.fillBranch("%s_pt_jerUp" % self.metBranchName, math.sqrt(met_px_jerUp**2 + met_py_jerUp**2))
+            self.out.fillBranch("%s_phi_jer" % self.metBranchName, math.atan2(met_py_jer, met_px_jer))        
+            self.out.fillBranch("%s_phi_jerUp" % self.metBranchName, math.atan2(met_py_jerUp, met_px_jerUp))        
+            self.out.fillBranch("%s_pt_jerDown" % self.metBranchName, math.sqrt(met_px_jerDown**2 + met_py_jerDown**2))
+            self.out.fillBranch("%s_phi_jerDown" % self.metBranchName, math.atan2(met_py_jerDown, met_px_jerDown))
+            
+        for jesUncertainty in self.jesUncertainties:
+            self.out.fillBranch("%s_pt_jes%sUp" % (self.jetBranchName, jesUncertainty), jets_pt_jesUp[jesUncertainty])
+            self.out.fillBranch("%s_pt_jes%sDown" % (self.jetBranchName, jesUncertainty), jets_pt_jesDown[jesUncertainty])
+            self.out.fillBranch("%s_mass_jes%sUp" % (self.jetBranchName, jesUncertainty), jets_mass_jesUp[jesUncertainty])
+            self.out.fillBranch("%s_mass_jes%sDown" % (self.jetBranchName, jesUncertainty), jets_mass_jesDown[jesUncertainty])
+            
+            if self.doGroomed : 
+                self.out.fillBranch("%s_msoftdrop_jes%sUp" % (self.jetBranchName, jesUncertainty), jets_msdcorr_jesUp[jesUncertainty])
+                self.out.fillBranch("%s_msoftdrop_jes%sDown" % (self.jetBranchName, jesUncertainty), jets_msdcorr_jesDown[jesUncertainty])
+                
+            
+            if self.corrMET:
+                self.out.fillBranch("%s_pt_jes%sUp" % (self.metBranchName, jesUncertainty), math.sqrt(met_px_jesUp[jesUncertainty]**2 + met_py_jesUp[jesUncertainty]**2))
+                self.out.fillBranch("%s_phi_jes%sUp" % (self.metBranchName, jesUncertainty), math.atan2(met_py_jesUp[jesUncertainty], met_px_jesUp[jesUncertainty]))
+                self.out.fillBranch("%s_pt_jes%sDown" % (self.metBranchName, jesUncertainty), math.sqrt(met_px_jesDown[jesUncertainty]**2 + met_py_jesDown[jesUncertainty]**2))
+                self.out.fillBranch("%s_phi_jes%sDown" % (self.metBranchName, jesUncertainty), math.atan2(met_py_jesDown[jesUncertainty], met_px_jesDown[jesUncertainty]))
+        if self.corrMET:
+            self.out.fillBranch("%s_pt_unclustEnUp" % self.metBranchName, math.sqrt(met_px_unclEnUp**2 + met_py_unclEnUp**2))
+            self.out.fillBranch("%s_phi_unclustEnUp" % self.metBranchName, math.atan2(met_py_unclEnUp, met_px_unclEnUp))
+            self.out.fillBranch("%s_pt_unclustEnDown" % self.metBranchName, math.sqrt(met_px_unclEnDown**2 + met_py_unclEnDown**2))
+            self.out.fillBranch("%s_phi_unclustEnDown" % self.metBranchName, math.atan2(met_py_unclEnDown, met_px_unclEnDown))
 
         return True
 
