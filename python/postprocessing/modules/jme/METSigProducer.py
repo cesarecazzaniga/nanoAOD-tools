@@ -24,7 +24,7 @@ class METSigProducer(Module):
         self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
         self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
         self.vetoEtaRegion      = vetoEtaRegion
-        ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
+        #ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
 
 
     def beginJob(self):
@@ -34,6 +34,8 @@ class METSigProducer(Module):
         #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
+        del self.res_pt
+        del self.res_phi
         pass
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
