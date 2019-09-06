@@ -11,7 +11,7 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 class METSigProducer(Module):
 
-    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15.):
+    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10)):
         jetCorrParam = ROOT.JetCorrectorParameters()
 
         self.pars               = parameters
@@ -23,7 +23,8 @@ class METSigProducer(Module):
         self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
         self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
         self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
-        ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
+        self.vetoEtaRegion      = vetoEtaRegion
+        #ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
 
 
     def beginJob(self):
@@ -33,13 +34,15 @@ class METSigProducer(Module):
         #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
+        del self.res_pt
+        del self.res_phi
         pass
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
         self.out.branch("MET_significance", "F")
         if self.calcVariations:
-            for var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
+            for var in ['_jesTotalUp', '_jesTotalDown', '_jer', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
                 self.out.branch("MET_significance"+var, "F")
         #self.out.branch("MET_significance_nom", "F")
 
@@ -82,13 +85,13 @@ class METSigProducer(Module):
         else: variations = ['']
 
         if self.calcVariations:
-            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']
+            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
 
         jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
 
         for var in variations:
             # no unclustered energy uncertainty for jets
-            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown']:
+            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_jer']:
                 jetPtVar = 'pt'+var
             metPtVar = 'pt'+var
             phiVar = 'phi'+var
@@ -100,12 +103,14 @@ class METSigProducer(Module):
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
-                        if l.pt > 10 and self.deltaR(j, l) < 0.4: clean = False
+                        if l.pt > 10 and self.deltaR(j, l) < 0.4:
+                            clean = False
                 if clean:
-                    if getattr(j, jetPtVar) > self.jetThreshold:
-                        cleanJets += [j]
-                    else:
-                        sumPtFromJets += getattr(j, jetPtVar)
+                    if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
+                        if getattr(j, jetPtVar) > self.jetThreshold:
+                            cleanJets += [j]
+                        else:
+                            sumPtFromJets += getattr(j, jetPtVar)
 
             # get the JER
             jet = ROOT.JME.JetParameters()
@@ -119,13 +124,13 @@ class METSigProducer(Module):
             cov_yy  = 0
             i = 0
             for j in cleanJets:
-                if not j.cleanmask>0: continue
-                index = self.getBin(abs(j.eta))
+                index       = self.getBin(abs(j.eta))
+                jet_index   = 0 if getattr(j, jetPtVar) < 40 else 1 # split into high/low pt jets
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[index] * getattr(j, jetPtVar) * j.dpt
-                dph =                    getattr(j, jetPtVar) * j.dphi
+                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar) * j.dpt
+                dph =                                  getattr(j, jetPtVar) * j.dphi
 
                 dpt *= dpt
                 dph *= dph
@@ -150,8 +155,7 @@ class METSigProducer(Module):
                 totalSumPt = metStd.sumPt + sumPtFromJets
 
 
-            #if var == '_nom': print 'sumPt', totalSumPt
-            cov_tt = self.pars[5]**2 + self.pars[6]**2*totalSumPt
+            cov_tt = self.pars[10]**2 + self.pars[11]**2*totalSumPt
             cov_xx += cov_tt
             cov_yy += cov_tt
 
@@ -178,7 +182,6 @@ class METSigProducer(Module):
             #    print "MET pt,x,y", met_pt, met_x, met_y
             #    print MET_sig
             #MET_sig_old = met.significance
-
             #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
             if var == '' or var == '_nom':
                 self.out.fillBranch("MET_significance", MET_sig)
