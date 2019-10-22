@@ -1,7 +1,7 @@
 import ROOT
 import os
 import numpy as np
-import math
+import math, tarfile, tempfile
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 from PhysicsTools.NanoAODTools.postprocessing.framework.datamodel import Collection, Object
@@ -20,17 +20,28 @@ class METSigProducer(Module):
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
-        self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
-        self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
-        self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
+        #self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
+        self.JERdirectory       = os.path.expandvars("$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/")
+
+        # read jet energy scale (JES) uncertainties
+        # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
+        #self.jesInputArchivePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
+        # Text files are now tarred so must extract first into temporary directory (gets deleted during python memory management at script exit)
+        self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tgz", "r:gz")# if not archive else tarfile.open(self.jesInputArchivePath+archive+".tgz", "r:gz")
+        self.jerInputFilePath = tempfile.mkdtemp()
+        self.jerArchive.extractall(self.jerInputFilePath)
+
+        #self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
         self.vetoEtaRegion      = vetoEtaRegion
         #ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
 
 
     def beginJob(self):
         self.JERdirectory   = os.path.expandvars(self.JERdirectory)
-        self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
-        self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        #self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        self.res_pt         = ROOT.JME.JetResolution("%s/%s/%s_PtResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera, self.JERera))
+        #self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        self.res_phi        = ROOT.JME.JetResolution("%s/%s/%s_PhiResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera, self.JERera))
         #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
