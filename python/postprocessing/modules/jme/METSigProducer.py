@@ -87,11 +87,10 @@ class METSigProducer(Module):
         if self.calcVariations:
             variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
 
-        jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
-
         for var in variations:
+            jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
             # no unclustered energy uncertainty for jets
-            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_jer']:
+            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown']:
                 jetPtVar = 'pt'+var
             metPtVar = 'pt'+var
             phiVar = 'phi'+var
@@ -100,6 +99,7 @@ class METSigProducer(Module):
             sumPtFromJets = 0
             cleanJets = []
             for j in jets:
+                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
@@ -107,15 +107,16 @@ class METSigProducer(Module):
                             clean = False
                 if clean:
                     if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
+<<<<<<< HEAD
                         if getattr(j, jetPtVar) > self.jetThreshold:
                             cleanJets += [j]
-                        else:
-                            sumPtFromJets += getattr(j, jetPtVar)
+                            sumPtFromJets += getattr(j, jetPtVar)/uncorrectJER
+>>>>>>> 0f2e0b8 (moving around things)
 
             # get the JER
-            jet = ROOT.JME.JetParameters()
             for j in cleanJets:
-                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)).setRho(rho)
+                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/uncorrectJER).setRho(rho)
                 j.dpt   = self.res_pt.getResolution(jet)
                 j.dphi  = self.res_phi.getResolution(jet)
 
@@ -125,12 +126,13 @@ class METSigProducer(Module):
             i = 0
             for j in cleanJets:
                 index       = self.getBin(abs(j.eta))
-                jet_index   = 0 if getattr(j, jetPtVar) < 40 else 1 # split into high/low pt jets
+                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
+                jet_index   = 0 if getattr(j, jetPtVar)/uncorrectJER < 40 else 1 # split into high/low pt jets
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar) * j.dpt
-                dph =                                  getattr(j, jetPtVar) * j.dphi
+                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)/uncorrectJER * j.dpt
+                dph =                                  getattr(j, jetPtVar)/uncorrectJER * j.dphi
 
                 dpt *= dpt
                 dph *= dph
