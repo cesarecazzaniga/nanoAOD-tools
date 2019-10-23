@@ -39,9 +39,9 @@ class METSigProducer(Module):
     def beginJob(self):
         self.JERdirectory   = os.path.expandvars(self.JERdirectory)
         #self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
-        self.res_pt         = ROOT.JME.JetResolution("%s/%s/%s_PtResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera, self.JERera))
+        self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
         #self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
-        self.res_phi        = ROOT.JME.JetResolution("%s/%s/%s_PhiResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera, self.JERera))
+        self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
         #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
