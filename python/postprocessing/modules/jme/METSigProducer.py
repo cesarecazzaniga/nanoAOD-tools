@@ -1,7 +1,7 @@
 import ROOT
 import os
 import numpy as np
-import math
+import math, tarfile, tempfile
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 from PhysicsTools.NanoAODTools.postprocessing.framework.datamodel import Collection, Object
@@ -20,17 +20,27 @@ class METSigProducer(Module):
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
-        self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
-        self.JERdirectory       = "$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/"
-        self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
+        self.JERdirectory       = os.path.expandvars("$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/")
+
+        # read jet energy scale (JES) uncertainties
+        # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
+        #self.jesInputArchivePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
+        # Text files are now tarred so must extract first into temporary directory (gets deleted during python memory management at script exit)
+        self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tgz", "r:gz")# if not archive else tarfile.open(self.jesInputArchivePath+archive+".tgz", "r:gz")
+        self.jerInputFilePath = tempfile.mkdtemp()
+        self.jerArchive.extractall(self.jerInputFilePath)
+
+        #self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
         self.vetoEtaRegion      = vetoEtaRegion
         #ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
 
 
     def beginJob(self):
         self.JERdirectory   = os.path.expandvars(self.JERdirectory)
-        self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
-        self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        #self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
+        #self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
+        self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
         #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
@@ -87,11 +97,10 @@ class METSigProducer(Module):
         if self.calcVariations:
             variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
 
-        jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
-
         for var in variations:
+            jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
             # no unclustered energy uncertainty for jets
-            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_jer']:
+            if var in ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown']:
                 jetPtVar = 'pt'+var
             metPtVar = 'pt'+var
             phiVar = 'phi'+var
@@ -100,6 +109,7 @@ class METSigProducer(Module):
             sumPtFromJets = 0
             cleanJets = []
             for j in jets:
+                correctJER = j.corr_JER if var in ['_jer'] else 1
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
@@ -107,15 +117,16 @@ class METSigProducer(Module):
                             clean = False
                 if clean:
                     if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
-                        if getattr(j, jetPtVar) > self.jetThreshold:
+                        if getattr(j, jetPtVar)*correctJER > self.jetThreshold:
                             cleanJets += [j]
                         else:
-                            sumPtFromJets += getattr(j, jetPtVar)
+                            sumPtFromJets += getattr(j, jetPtVar)*correctJER
 
             # get the JER
             jet = ROOT.JME.JetParameters()
             for j in cleanJets:
-                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)).setRho(rho)
+                correctJER = j.corr_JER if var in ['_jer'] else 1
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/correctJER).setRho(rho)
                 j.dpt   = self.res_pt.getResolution(jet)
                 j.dphi  = self.res_phi.getResolution(jet)
 
@@ -125,13 +136,13 @@ class METSigProducer(Module):
             i = 0
             for j in cleanJets:
                 index       = self.getBin(abs(j.eta))
-                jet_index   = 0 if getattr(j, jetPtVar) < 40 else 1 # split into high/low pt jets
+                correctJER = j.corr_JER if var in ['_jer'] else 1
+                jet_index   = 0 if getattr(j, jetPtVar)*correctJER < 40 else 1 # split into high/low pt jets
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar) * j.dpt
-                dph =                                  getattr(j, jetPtVar) * j.dphi
-
+                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)*correctJER * j.dpt
+                dph =                                  getattr(j, jetPtVar)*correctJER * j.dphi
                 dpt *= dpt
                 dph *= dph
 
