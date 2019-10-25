@@ -20,7 +20,6 @@ class METSigProducer(Module):
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
-        #self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
         self.JERdirectory       = os.path.expandvars("$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/")
 
         # read jet energy scale (JES) uncertainties
@@ -144,7 +143,6 @@ class METSigProducer(Module):
                 sj = math.sin(j.phi)
                 dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)*correctJER * j.dpt
                 dph =                                  getattr(j, jetPtVar)*correctJER * j.dphi
-
                 dpt *= dpt
                 dph *= dph
 
