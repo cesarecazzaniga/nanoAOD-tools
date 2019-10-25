@@ -112,6 +112,7 @@ jmsValues = {
 
 def createJMECorrector(isMC=True,
                        dataYear=2016,
+                       ultraLegacy=False,
                        runPeriod="B",
                        jesUncert="Total",
                        jetType="AK4PFchs",
@@ -124,7 +125,10 @@ def createJMECorrector(isMC=True,
                        saveMETUncs=['T1', 'T1Smear']):
 
     dataYear = str(dataYear)
-
+    
+    if ultraLegacy:
+         dataYear = 'UL'+dataYear        
+    
     if isMC and not isFastSim:
         jecTag_ = jecTagsMC[dataYear]
     elif isMC and isFastSim:
@@ -134,8 +138,8 @@ def createJMECorrector(isMC=True,
 
     jmeUncert_ = [x for x in jesUncert.split(",")]
     jerTag_ = jerTagsMC[dataYear]
-    jmrValues_ = jmrValues[dataYear]
-    jmsValues_ = jmsValues[dataYear]
+    jmrValues_ = jmrValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
+    jmsValues_ = jmsValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
     archiveTag_ = archiveTagsDATA[dataYear]
     met_ = metBranchName
     print('JEC : ' + str(jecTag_) + '\t JER : ' + str(jerTag_))
