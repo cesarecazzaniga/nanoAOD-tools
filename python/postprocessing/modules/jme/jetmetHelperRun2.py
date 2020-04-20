@@ -39,7 +39,7 @@ jecTagsDATA = { '2016B' : 'Summer16_07Aug2017BCD_V11_DATA',
 
 jerTagsMC = {'2016' : 'Summer16_25nsV1_MC',
              '2017' : 'Fall17_V3_MC',
-             '2018' : 'Autumn18_V7_MC'
+             '2018' : 'Autumn18_V7b_MC'
             }
 
 #jet mass resolution: https://twiki.cern.ch/twiki/bin/view/CMS/JetWtagging
