@@ -11,10 +11,11 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 class METSigProducer(Module):
 
-    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10)):
+    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10), pTdependent=True):
         jetCorrParam = ROOT.JetCorrectorParameters()
 
         self.pars               = parameters
+        self.pTdependent        = pTdependent
         self.JERera             = JERera
         self.METCollection      = METCollection
         self.useRecorr          = useRecorr
@@ -171,7 +172,8 @@ class METSigProducer(Module):
                 totalSumPt = metStd.sumPt + sumPtFromJets
 
 
-            cov_tt = self.pars[10]**2 + self.pars[11]**2*totalSumPt
+            ind = 10 if self.pTdependent else 5
+            cov_tt = self.pars[ind]**2 + self.pars[ind+1]**2*totalSumPt
             cov_xx += cov_tt
             cov_yy += cov_tt
 
