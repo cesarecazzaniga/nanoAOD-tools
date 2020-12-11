@@ -163,13 +163,37 @@ class METSigProducer(Module):
                 i += 1
 
             # unclustered energy
-            if 'unclust' in var:
-                if 'Up' in var:
-                    totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+            #LOR commmented nex lines to Try to extend also for central produced nanoAOD (v7 onwards)
+            #if 'unclust' in var:
+            #    if 'Up' in var:
+            #        totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+            #    else:
+            #        totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+            #else:
+            #    totalSumPt = metStd.sumPt + sumPtFromJets
+
+            #LOR Try to extend also for central produced nanoAOD (v7 onwards)
+            # unclustered energy                                                                                                                                                    
+            if hasattr(metStd, 'sumPt'):#LOR ADDED                                                                                                                                  
+                if 'unclust' in var:
+                    if 'Up' in var:
+                        totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
+                    else:
+                        totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
                 else:
-                    totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
-            else:
-                totalSumPt = metStd.sumPt + sumPtFromJets
+                    totalSumPt = metStd.sumPt + sumPtFromJets
+            else:#LOR STARTS TO ADD                                                                                                                                                  
+                if 'unclust' in var:
+                    sumPtUnclustEnDeltaUp = math.sqrt(metStd.MetUnclustEnUpDeltaX*metStd.MetUnclustEnUpDeltaX  + metStd.MetUnclustEnUpDeltaY*metStd.MetUnclustEnUpDeltaY )
+                    if 'Up' in var:
+                        totalSumPt = metStd.sumPtUnclustered + sumPtUnclustEnDeltaUp + sumPtFromJets
+                    else:
+                        totalSumPt = metStd.sumPtUnclustered - sumPtUnclustEnDeltaUp + sumPtFromJets
+                else:
+                    totalSumPt = metStd.sumPtUnclustered + sumPtFromJets
+            #LOR ENDS TO ADD               
+
+
 
 
             ind = 10 if self.pTdependent else 5
