@@ -16,7 +16,11 @@ jecTagsFastSim = {'2016' : 'Spring16_25nsFastSimV1_MC',
 
 archiveTagsDATA = {'2016' : 'Summer16_07Aug2017_V11_DATA', 
                    '2017' : 'Fall17_17Nov2017_V32_DATA', 
-                   '2018' : 'Autumn18_V19_DATA'
+                   '2018' : 'Autumn18_V19_DATA',
+                   #added for UL samples
+                   'UL2016' : 'Summer20UL16_JRV3_MC',
+                   'UL2017' : 'Summer19UL17_JRV2_MC',
+                   'UL2018' : 'Summer19UL18_JRV2_MC'
                   }
 
 jecTagsDATA = { '2016B' : 'Summer16_07Aug2017BCD_V11_DATA', 
@@ -39,7 +43,12 @@ jecTagsDATA = { '2016B' : 'Summer16_07Aug2017BCD_V11_DATA',
 
 jerTagsMC = {'2016' : 'Summer16_25nsV1_MC',
              '2017' : 'Fall17_V3_MC',
-             '2018' : 'Autumn18_V7b_MC'
+             '2018' : 'Autumn18_V7b_MC',
+             #added for UL samples
+             'UL2016' : 'Summer20UL16_JRV3_MC',
+             'UL2017' : 'Summer19UL17_JRV2_MC',
+             'UL2018' : 'Summer19UL18_JRV2_MC'
+
             }
 
 #jet mass resolution: https://twiki.cern.ch/twiki/bin/view/CMS/JetWtagging
