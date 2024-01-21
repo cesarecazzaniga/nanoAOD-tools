@@ -37,6 +37,7 @@ class JetReCalibrator:
         # Make base corrections
         # "%s/src/CMGTools/RootTools/data/jec" % os.environ['CMSSW_BASE'];
         path = os.path.expandvars(jecPath)
+        print "%s/%s_L1FastJet_%s.txt" % (path, globalTag, jetFlavour)
         self.L1JetPar = ROOT.JetCorrectorParameters(
             "%s/%s_L1FastJet_%s.txt" % (path, globalTag, jetFlavour), "")
         self.L2JetPar = ROOT.JetCorrectorParameters(

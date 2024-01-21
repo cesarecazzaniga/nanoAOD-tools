@@ -21,7 +21,6 @@ class METSigProducer(Module):
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
-        #self.JetResolutionFile  = "$CMSSW_BASE/src/JetMETCorrections/Modules/src/JetResolution.cc+"
         self.JERdirectory       = os.path.expandvars("$CMSSW_BASE/src/PhysicsTools/NanoAODTools/data/jme/")
 
         # read jet energy scale (JES) uncertainties
@@ -111,7 +110,7 @@ class METSigProducer(Module):
             sumPtFromJets = 0
             cleanJets = []
             for j in jets:
-                uncorrectJER = j.corr_JER if var in ['_jer'] else 1
+                correctJER = j.corr_JER if var in ['_jer'] else 1
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
@@ -119,9 +118,6 @@ class METSigProducer(Module):
                             clean = False
                 if clean:
                     if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
-                        if getattr(j, jetPtVar) > self.jetThreshold:
-                            cleanJets += [j]
-                            sumPtFromJets += getattr(j, jetPtVar)/uncorrectJER
 
                         if getattr(j, jetPtVar)*correctJER > self.jetThreshold:
                             cleanJets += [j]
@@ -129,11 +125,12 @@ class METSigProducer(Module):
                             sumPtFromJets += getattr(j, jetPtVar)*correctJER
 
             # get the JER
+            jet = ROOT.JME.JetParameters()
             for j in cleanJets:
                 correctJER = j.corr_JER if var in ['_jer'] else 1
-                j.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/correctJER).setRho(rho)
-                j.dpt   = self.res_pt.getResolution(j)
-                j.dphi  = self.res_phi.getResolution(j)
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/correctJER).setRho(rho)
+                j.dpt   = self.res_pt.getResolution(jet)
+                j.dphi  = self.res_phi.getResolution(jet)
 
             cov_xx  = 0
             cov_xy  = 0
@@ -146,8 +143,9 @@ class METSigProducer(Module):
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)*correctJER * j.dpt
-                dph =                                  getattr(j, jetPtVar)*correctJER * j.dphi
+                
+                dpt = self.pars[2*index + jet_index if self.pTdependent else index] * getattr(j, jetPtVar)*correctJER * j.dpt
+                dph =                                                                 getattr(j, jetPtVar)*correctJER * j.dphi
 
                 dpt *= dpt
                 dph *= dph
@@ -193,9 +191,6 @@ class METSigProducer(Module):
                     totalSumPt = metStd.sumPtUnclustered + sumPtFromJets
             #LOR ENDS TO ADD               
 
-
-
-
             ind = 10 if self.pTdependent else 5
             cov_tt = self.pars[ind]**2 + self.pars[ind+1]**2*totalSumPt
             cov_xx += cov_tt
@@ -233,6 +228,5 @@ class METSigProducer(Module):
         return True
 
 # define modules using the syntax 'name = lambda : constructor' to avoid having them loaded when not needed
-
-metSig = lambda : METSigProducer( "Summer16_25nsV1_MC", [1.0,1.0,1.0,1.0,1.0,0.0,0.5] )
+#metSig = lambda : METSigProducer( "Summer16_25nsV1_MC", [1.0,1.0,1.0,1.0,1.0,0.0,0.5] )
 

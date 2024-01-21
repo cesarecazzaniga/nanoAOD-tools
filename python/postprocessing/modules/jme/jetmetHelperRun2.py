@@ -126,7 +126,7 @@ def createJMECorrector(isMC=True,
 
     dataYear = str(dataYear)
     
-    if ultraLegacy:
+    if ultraLegacy and isMC:
          dataYear = 'UL'+dataYear        
     
     if isMC and not isFastSim:
@@ -195,6 +195,7 @@ def createJMECorrector(isMC=True,
                 jmsVals=jmsValues_,
                 isData=True)
 
+    print "JME corrections loaded"
     return jmeCorrections
 
 
