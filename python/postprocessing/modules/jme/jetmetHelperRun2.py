@@ -195,7 +195,6 @@ def createJMECorrector(isMC=True,
                 jmsVals=jmsValues_,
                 isData=True)
 
-    print "JME corrections loaded"
     return jmeCorrections
 
 

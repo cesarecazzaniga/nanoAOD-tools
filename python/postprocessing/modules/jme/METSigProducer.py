@@ -17,7 +17,7 @@ class METSigProducer(Module):
         self.pars               = parameters
         self.pTdependent        = pTdependent
         self.JERera             = JERera
-        self.METCollection      = METCollection
+        self.METCollection      = METCollection + "_T1"     #this is a hack to get the correct MET collection for UL
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
@@ -87,16 +87,18 @@ class METSigProducer(Module):
         electrons   = Collection(event, "Electron")
         muons       = Collection(event, "Muon")
         photons     = Collection(event, "Photon")
-        met         = Object(event, self.METCollection)
-        metStd      = Object(event, "MET")
+        met         = Object(event, self.METCollection)        #here there are the corrected MET objects with up and down variations
+        metStd      = Object(event, "MET")                     #here there are the standard MET objects
         rho         = getattr(event, "fixedGridRhoFastjetAll")
+
 
         ## calculate MET significance for all variants of MET/jets
         if self.useRecorr: variations = ['_nom']
         else: variations = ['']
 
         if self.calcVariations:
-            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
+            #variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jer', '_jerDown', '_unclustEnUp', '_unclustEnDown']
+            variations += ['_jesTotalUp', '_jesTotalDown', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']   #CZZ: FIX - _jer is not yet available for UL
 
         for var in variations:
             jetPtVar = 'pt' if not self.useRecorr else 'pt_nom'
@@ -154,25 +156,11 @@ class METSigProducer(Module):
                 cov_xy += (dpt-dph)*cj*sj
                 cov_yy += dph*cj*cj + dpt*sj*sj
 
-                #if var == '_nom':
-                #    print getattr(j, jetPtVar)
-                #    print cov_xx, cov_xy, cov_yy
 
                 i += 1
 
-            # unclustered energy
-            #LOR commmented nex lines to Try to extend also for central produced nanoAOD (v7 onwards)
-            #if 'unclust' in var:
-            #    if 'Up' in var:
-            #        totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
-            #    else:
-            #        totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
-            #else:
-            #    totalSumPt = metStd.sumPt + sumPtFromJets
-
-            #LOR Try to extend also for central produced nanoAOD (v7 onwards)
-            # unclustered energy                                                                                                                                                    
-            if hasattr(metStd, 'sumPt'):#LOR ADDED                                                                                                                                  
+            # unclustered energy - here applies the correction for unclustered energy (here is taking sumPtUnclustered from MET collection, since it is not available in MET_T1 collection)                                                                                                                                                 
+            if hasattr(metStd, 'sumPt'):                                                                                                                                 
                 if 'unclust' in var:
                     if 'Up' in var:
                         totalSumPt = metStd.sumPt + metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
@@ -180,7 +168,8 @@ class METSigProducer(Module):
                         totalSumPt = metStd.sumPt - metStd.sumPtUnclustEnDeltaUp + sumPtFromJets
                 else:
                     totalSumPt = metStd.sumPt + sumPtFromJets
-            else:#LOR STARTS TO ADD                                                                                                                                                  
+
+            elif hasattr(metStd, 'sumPtUnclustered') :                                                                                                                                             
                 if 'unclust' in var:
                     sumPtUnclustEnDeltaUp = math.sqrt(metStd.MetUnclustEnUpDeltaX*metStd.MetUnclustEnUpDeltaX  + metStd.MetUnclustEnUpDeltaY*metStd.MetUnclustEnUpDeltaY )
                     if 'Up' in var:
@@ -189,7 +178,12 @@ class METSigProducer(Module):
                         totalSumPt = metStd.sumPtUnclustered - sumPtUnclustEnDeltaUp + sumPtFromJets
                 else:
                     totalSumPt = metStd.sumPtUnclustered + sumPtFromJets
-            #LOR ENDS TO ADD               
+
+            else:
+                print("Cannot compute MET significance !")
+                #throw exception
+                return False
+              
 
             ind = 10 if self.pTdependent else 5
             cov_tt = self.pars[ind]**2 + self.pars[ind+1]**2*totalSumPt
@@ -198,6 +192,7 @@ class METSigProducer(Module):
 
             det = cov_xx*cov_yy - cov_xy*cov_xy
 
+            #Invert the covariance matrix
             if det>0:
                 ncov_xx =  cov_yy / det
                 ncov_xy = -cov_xy / det
@@ -214,12 +209,10 @@ class METSigProducer(Module):
             met_x = met_pt * math.cos(met_phi)
             met_y = met_pt * math.sin(met_phi)
 
+            #Definition of the significance
             MET_sig = met_x*met_x*ncov_xx + 2*met_x*met_y*ncov_xy + met_y*met_y*ncov_yy
-            #if var == '_nom':
-            #    print "MET pt,x,y", met_pt, met_x, met_y
-            #    print MET_sig
-            #MET_sig_old = met.significance
-            #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
+
+
             if var == '' or var == '_nom':
                 self.out.fillBranch("MET_significance", MET_sig)
             else:
