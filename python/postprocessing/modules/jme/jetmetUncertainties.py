@@ -95,18 +95,49 @@ class jetmetUncertaintiesProducer(Module):
 
         # read jet energy scale (JES) uncertainties
         # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
-        self.jesInputFilePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
-        if len(jesUncertainties) == 1 and jesUncertainties[0] == "Total":
-            self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
-        else:
-            if self.era == "2016":
-                self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
-            elif self.era == "2017":
-                self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
-            elif self.era == "2018":
-                self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
-            else:
-                raise ValueError("ERROR: Invalid era = '%s'!" % self.era)
+        #self.jesInputFilePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
+        #if len(jesUncertainties) == 1 and jesUncertainties[0] == "Total":
+        #    self.jesUncertaintyInputFileName = "%s_Uncertainty_"%globalTag + jetType + ".txt"
+        #else:
+        #    if self.era == "2016":
+        #        self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
+        #    elif self.era == "2017":
+        #        self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
+        #    elif self.era == "2018":
+        #        self.jesUncertaintyInputFileName = "%s_UncertaintySources_"%globalTag + jetType + ".txt"
+        #    else:
+        #        raise ValueError("ERROR: Invalid era = '%s'!" % self.era)
+
+        ####NEW
+        # read jet energy scale (JES) uncertainties
+        # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
+        self.jesInputArchivePath = os.environ['CMSSW_BASE'] + \
+            "/src/PhysicsTools/NanoAODTools/data/jme/"
+        # Text files are now tarred so must extract first into temporary
+        # directory (gets deleted during python memory management at
+        # script exit)
+        try:
+            self.jesArchive = tarfile.open(
+                self.jesInputArchivePath + globalTag +
+                ".tgz", "r:gz") if not archive else tarfile.open(
+                    self.jesInputArchivePath + archive + ".tgz", "r:gz")
+        except:
+
+            try:
+
+                self.jesArchive = tarfile.open(
+                    self.jesInputArchivePath + globalTag +
+                     ".tar", "r") if not archive else tarfile.open(
+                        self.jesInputArchivePath + archive + ".tar", "r")
+            except:
+                #raise error if neither .tgz nor .tar file exists
+                raise ValueError(
+                    "ERROR: cannot find JES tar or tgz file for globalTag %s and archive %s")
+        
+        
+        self.jesInputFilePath = tempfile.mkdtemp()
+        self.jesArchive.extractall(self.jesInputFilePath)
+
 
         # to fully re-calculate type-1 MET the JEC that are currently
         # applied are also needed. IS THAT EVEN CORRECT?
@@ -241,6 +272,7 @@ class jetmetUncertaintiesProducer(Module):
     def endJob(self):
         if not self.isData:
             self.jetSmearer.endJob()
+        shutil.rmtree(self.jesInputFilePath)
     
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
@@ -265,6 +297,8 @@ class jetmetUncertaintiesProducer(Module):
 
         self.out.branch("%s_T1_pt" % self.metBranchName, "F")
         self.out.branch("%s_T1_phi" % self.metBranchName, "F")
+        #add sumPt for MET significance
+        self.out.branch("%s_T1_sumPtUnclustered" % self.metBranchName, "F")
 
         if not self.isData:
             self.out.branch("%s_T1Smear_pt" % self.metBranchName, "F")
@@ -339,7 +373,7 @@ class jetmetUncertaintiesProducer(Module):
 
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
-        
+
         jets = Collection(event, self.jetBranchName)
         nJet = event.nJet
         lowPtJets = Collection(event,
@@ -888,6 +922,7 @@ class jetmetUncertaintiesProducer(Module):
             met_T1Smear_px_unclEnDown = met_T1Smear_px_unclEnDown - met_deltaPx_unclEn
             met_T1Smear_py_unclEnDown = met_T1Smear_py_unclEnDown - met_deltaPy_unclEn
 
+
         self.out.fillBranch("%s_pt_raw" % self.jetBranchName, jets_pt_raw)
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
         self.out.fillBranch("%s_corr_JEC" % self.jetBranchName, jets_corr_JEC)
@@ -905,6 +940,13 @@ class jetmetUncertaintiesProducer(Module):
                             math.sqrt(met_T1_px**2 + met_T1_py**2))
         self.out.fillBranch("%s_T1_phi" % self.metBranchName,
                             math.atan2(met_T1_py, met_T1_px))
+        
+        #check if in self.out exists a branch called "MET_T1_sumPtUnclustered", if not create it and fill it (copying from self.metBranchName + "_sumPtUnclustered")
+        #needed for MetSig computation
+        #if not hasattr(self.out, "%s_T1_sumPtUnclustered" % self.metBranchName):
+        #    self.out.branch("%s_T1_sumPtUnclustered" % self.metBranchName, "F")
+        #    self.out.fillBranch("%s_T1_sumPtUnclustered" % self.metBranchName, getattr(event, self.metBranchName + "_sumPtUnclustered"))
+
 
         self.out.fillBranch("%s_mass_raw" % self.jetBranchName, jets_mass_raw)
         self.out.fillBranch("%s_mass_nom" % self.jetBranchName, jets_mass_nom)
@@ -1047,11 +1089,13 @@ class jetmetUncertaintiesProducer(Module):
                 "%s_T1Smear_phi_unclustEnDown" % self.metBranchName,
                 math.atan2(met_T1Smear_py_unclEnDown, met_T1Smear_px_unclEnDown))
 
+
         return True
 
 
 # define modules using the syntax 'name = lambda : constructor' to avoid
 # having them loaded when not needed
+'''
 jetmetUncertainties2016 = lambda: jetmetUncertaintiesProducer(
     "2016", "Summer16_07Aug2017_V11_MC", ["Total"])
 jetmetUncertainties2016All = lambda: jetmetUncertaintiesProducer(
@@ -1085,3 +1129,4 @@ jetmetUncertainties2018AK4Puppi = lambda: jetmetUncertaintiesProducer(
     "2018", "Autumn18_V8_MC", ["Total"], jetType="AK4PFPuppi")
 jetmetUncertainties2018AK4PuppiAll = lambda: jetmetUncertaintiesProducer(
     "2018", "Autumn18_V8_MC", ["All"], jetType="AK4PFPuppi")
+'''

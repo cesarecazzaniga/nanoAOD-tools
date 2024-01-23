@@ -27,7 +27,16 @@ class METSigProducer(Module):
         # (downloaded from https://twiki.cern.ch/twiki/bin/view/CMS/JECDataMC )
         #self.jesInputArchivePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
         # Text files are now tarred so must extract first into temporary directory (gets deleted during python memory management at script exit)
-        self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tgz", "r:gz")# if not archive else tarfile.open(self.jesInputArchivePath+archive+".tgz", "r:gz")
+        try:
+            self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tgz", "r:gz")# if not archive else tarfile.open(self.jesInputArchivePath+archive+".tgz", "r:gz")
+        except:
+            try:
+                #try to open tar
+                self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tar", "r")
+            except:
+                #raise exception if neither works
+                raise Exception("Could not open JER archive")
+        
         self.jerInputFilePath = tempfile.mkdtemp()
         self.jerArchive.extractall(self.jerInputFilePath)
 
@@ -38,11 +47,8 @@ class METSigProducer(Module):
 
     def beginJob(self):
         self.JERdirectory   = os.path.expandvars(self.JERdirectory)
-        #self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
         self.res_pt         = ROOT.JME.JetResolution("%s/%s_PtResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
-        #self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
         self.res_phi        = ROOT.JME.JetResolution("%s/%s_PhiResolution_AK4PFchs.txt"%(self.jerInputFilePath, self.JERera))
-        #self.jer_SF         = ROOT.JME.JetResolutionScaleFactor("%s/%s_SF_AK4PFchs.txt"%(self.JERdirectory, self.JERera))
 
     def endJob(self):
         del self.res_pt

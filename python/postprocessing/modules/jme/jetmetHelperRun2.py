@@ -126,7 +126,7 @@ def createJMECorrector(isMC=True,
 
     dataYear = str(dataYear)
     
-    if ultraLegacy and isMC:
+    if ultraLegacy:
          dataYear = 'UL'+dataYear        
     
     if isMC and not isFastSim:
@@ -138,6 +138,10 @@ def createJMECorrector(isMC=True,
 
     jmeUncert_ = [x for x in jesUncert.split(",")]
     jerTag_ = jerTagsMC[dataYear]
+    #CZZ: here adding hack for UL2017 jer, if data year is UL2017, use UL2018 jer
+    if 'UL2017' in dataYear:
+        jerTag_ = jerTagsMC['UL2018']
+
     jmrValues_ = jmrValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
     jmsValues_ = jmsValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
     archiveTag_ = archiveTagsDATA[dataYear]

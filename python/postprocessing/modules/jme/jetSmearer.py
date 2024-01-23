@@ -33,8 +33,19 @@ class jetSmearer(Module):
             "/src/PhysicsTools/NanoAODTools/data/jme/"
         self.jerTag = jerInputFileName[:jerInputFileName.find('_MC_') +
                                        len('_MC')]
-        self.jerArchive = tarfile.open(
-            self.jerInputArchivePath + self.jerTag + ".tgz", "r:gz")
+        try:
+            self.jerArchive = tarfile.open(
+                self.jerInputArchivePath + self.jerTag + ".tgz", "r:gz")
+        except:
+            try:
+                self.jerArchive = tarfile.open(
+                self.jerInputArchivePath + self.jerTag + ".tar", "r")
+            except:
+                raise Exception(
+                    "Could not find tar file for JERs with tag %s" %
+                    self.jerTag)
+        
+        
         self.jerInputFilePath = tempfile.mkdtemp()
         self.jerArchive.extractall(self.jerInputFilePath)
         self.jerInputFileName = jerInputFileName
