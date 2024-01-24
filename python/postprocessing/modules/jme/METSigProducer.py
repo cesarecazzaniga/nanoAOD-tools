@@ -16,6 +16,14 @@ class METSigProducer(Module):
 
         self.pars               = parameters
         self.pTdependent        = pTdependent
+        
+        #here hack for UL2017, since the JER files are not yet available take the ones from 2018
+        if JERera == "Summer19UL17_JRV2_MC" or JERera == "Summer19UL17_JRV2_DATA":
+            if "MC" in JERera:
+                JERera = "Summer19UL18_JRV2_MC"
+            else:
+                JERera = "Summer19UL18_JRV2_DATA"
+
         self.JERera             = JERera
         self.METCollection      = METCollection + "_T1"     #this is a hack to get the correct MET collection for UL
         self.useRecorr          = useRecorr
@@ -35,14 +43,14 @@ class METSigProducer(Module):
                 self.jerArchive = tarfile.open(self.JERdirectory+JERera+".tar", "r")
             except:
                 #raise exception if neither works
+                #print path 
+                print(self.JERdirectory+JERera)
                 raise Exception("Could not open JER archive")
         
         self.jerInputFilePath = tempfile.mkdtemp()
         self.jerArchive.extractall(self.jerInputFilePath)
 
-        #self.JetResolutionFile  = os.path.expandvars(self.JetResolutionFile)
-        self.vetoEtaRegion      = vetoEtaRegion
-        #ROOT.gROOT.ProcessLine('.L '+self.JetResolutionFile)        
+        self.vetoEtaRegion      = vetoEtaRegion     
 
 
     def beginJob(self):

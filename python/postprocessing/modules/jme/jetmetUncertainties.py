@@ -132,7 +132,8 @@ class jetmetUncertaintiesProducer(Module):
             except:
                 #raise error if neither .tgz nor .tar file exists
                 raise ValueError(
-                    "ERROR: cannot find JES tar or tgz file for globalTag %s and archive %s")
+                    "ERROR: cannot find JES tar or tgz file for globalTag %s and archive %s" , globalTag, archive)
+                    
         
         
         self.jesInputFilePath = tempfile.mkdtemp()

@@ -113,6 +113,7 @@ jmsValues = {
 def createJMECorrector(isMC=True,
                        dataYear=2016,
                        ultraLegacy=False,
+                       preVFP=False,
                        runPeriod="B",
                        jesUncert="Total",
                        jetType="AK4PFchs",
@@ -126,8 +127,13 @@ def createJMECorrector(isMC=True,
 
     dataYear = str(dataYear)
     
+    #CZZ: accessing UL corrections
     if ultraLegacy:
-         dataYear = 'UL'+dataYear        
+         dataYear = 'UL'+dataYear
+
+    #CZZ: here adding hack for vpf UL2016 jer, if data year is UL2016_preVFP
+    if preVFP and dataYear == 'UL2016':
+        dataYear = 'UL2016_preVFP'        
     
     if isMC and not isFastSim:
         jecTag_ = jecTagsMC[dataYear]
@@ -138,12 +144,15 @@ def createJMECorrector(isMC=True,
 
     jmeUncert_ = [x for x in jesUncert.split(",")]
     jerTag_ = jerTagsMC[dataYear]
+    
     #CZZ: here adding hack for UL2017 jer, if data year is UL2017, use UL2018 jer
     if 'UL2017' in dataYear:
+        print('UL2017 detected, using UL2018 JER for now ....')
         jerTag_ = jerTagsMC['UL2018']
+    
 
-    jmrValues_ = jmrValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
-    jmsValues_ = jmsValues[dataYear.replace('UL','')]      #CZZ: FIX - not yet available for UL
+    jmrValues_ = jmrValues[dataYear.replace('UL','').replace('_preVFP','')]      #CZZ: FIX - not yet available for UL
+    jmsValues_ = jmsValues[dataYear.replace('UL','').replace('_preVFP','')]      #CZZ: FIX - not yet available for UL
     archiveTag_ = archiveTagsDATA[dataYear]
     met_ = metBranchName
     print('JEC : ' + str(jecTag_) + '\t JER : ' + str(jerTag_))
